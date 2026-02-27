@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SuperNova TryOnMe - Smart Search Results</title>
+  <link rel="stylesheet" href="results.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header class="nova-header">
+    <div class="nova-header-inner">
+      <h1 class="nova-header-title">&#10024; SuperNova TryOnMe Smart Search</h1>
+      <p class="nova-header-subtitle" id="searchQuery"></p>
+    </div>
+  </header>
+
+  <!-- Loading State -->
+  <div class="nova-loading" id="loadingState">
+    <div class="nova-loading-spinner"></div>
+    <h2>Searching Amazon with Nova Act...</h2>
+    <p>Our AI agent is browsing Amazon, applying filters, and finding the best products for you.</p>
+    <p class="nova-loading-hint">This may take 30-60 seconds</p>
+    <p class="nova-loading-timer" id="searchTimer">Elapsed: 0s</p>
+  </div>
+
+  <!-- Error State -->
+  <div class="nova-error" id="errorState" hidden>
+    <div class="nova-error-icon">&#9888;</div>
+    <h2>Something went wrong</h2>
+    <p id="errorMessage"></p>
+    <button class="nova-btn nova-btn-primary" id="errorCloseBtn">Close</button>
+  </div>
+
+  <!-- Results Grid -->
+  <main class="nova-results" id="resultsGrid" hidden>
+    <div class="nova-results-header">
+      <span id="resultCount"></span>
+      <span class="nova-badge">&#11088; 4+ Stars Only</span>
+      <span class="nova-search-time" id="searchTime"></span>
+    </div>
+    <div class="nova-grid" id="productGrid"></div>
+  </main>
+
+  <!-- Try-On Modal -->
+  <div class="nova-modal-overlay" id="tryOnModal" hidden>
+    <div class="nova-modal">
+      <div class="nova-modal-header">
+        <h3>Virtual Try-On</h3>
+        <button class="nova-modal-close" id="modalCloseBtn">&times;</button>
+      </div>
+      <div class="nova-modal-body" id="tryOnModalBody">
+        <div class="nova-loading">
+          <div class="nova-loading-spinner"></div>
+          <p>Generating your virtual try-on...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="results.js"></script>
+</body>
+</html>

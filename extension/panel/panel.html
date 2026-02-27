@@ -1,0 +1,154 @@
+<!-- =========================================================================
+  NovaTryOnMe - Side Panel (injected into Amazon product pages)
+  This is an HTML fragment - no <html> or <body> tags.
+  Gets injected as innerHTML of a container div by content.js.
+  ========================================================================== -->
+
+<!-- Panel Header -->
+<div class="nova-panel-header">
+  <div class="nova-panel-header-left">
+    <svg class="nova-panel-logo" viewBox="0 0 32 32" width="22" height="22" fill="none">
+      <line x1="16" y1="1" x2="16" y2="5" stroke="#FFD580" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+      <line x1="16" y1="27" x2="16" y2="31" stroke="#FFD580" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+      <line x1="1" y1="16" x2="5" y2="16" stroke="#FFD580" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+      <line x1="27" y1="16" x2="31" y2="16" stroke="#FFD580" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+      <line x1="5.4" y1="5.4" x2="8.2" y2="8.2" stroke="#FFD580" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+      <line x1="23.8" y1="23.8" x2="26.6" y2="26.6" stroke="#FFD580" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+      <line x1="26.6" y1="5.4" x2="23.8" y2="8.2" stroke="#FFD580" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+      <line x1="8.2" y1="23.8" x2="5.4" y2="26.6" stroke="#FFD580" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+      <circle cx="16" cy="16" r="9" fill="url(#supernovaGradP)" opacity="0.15"/>
+      <circle cx="16" cy="16" r="5.5" fill="url(#supernovaGradP)" opacity="0.3"/>
+      <polygon points="16,7 18.5,13 25,13.5 20,18 21.5,25 16,21 10.5,25 12,18 7,13.5 13.5,13" fill="#FF9900" stroke="#FFB84D" stroke-width="0.5"/>
+      <circle cx="16" cy="16" r="2.5" fill="#FFD580"/>
+      <defs>
+        <radialGradient id="supernovaGradP" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#FFD580"/>
+          <stop offset="100%" stop-color="#FF9900" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+    </svg>
+    <span class="nova-panel-title">SuperNova TryOnMe</span>
+  </div>
+  <button class="nova-panel-close" id="novaPanelClose" title="Close panel">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+      <line x1="18" y1="6" x2="6" y2="18"/>
+      <line x1="6" y1="6" x2="18" y2="18"/>
+    </svg>
+  </button>
+</div>
+
+<!-- Scrollable Content -->
+<div class="nova-panel-content" id="novaPanelContent">
+
+  <!-- Product Info Section -->
+  <div class="nova-product-info" id="novaProductInfo">
+    <img class="nova-product-thumb" id="novaProductThumb" src="" alt="Product">
+    <div class="nova-product-details">
+      <p class="nova-product-name" id="novaProductName">Loading product...</p>
+      <p class="nova-product-category" id="novaProductCategory"></p>
+    </div>
+  </div>
+
+  <!-- Result Display Area -->
+  <div class="nova-result-area" id="novaResultArea">
+
+    <!-- Loading State -->
+    <div class="nova-loading" id="novaLoading">
+      <div class="nova-skeleton nova-skeleton-image"></div>
+      <div class="nova-loading-text">
+        <div class="nova-spinner"></div>
+        <span>Generating your look...</span>
+      </div>
+    </div>
+
+    <!-- Result Image (hidden by default) -->
+    <div class="nova-result-display" id="novaResultDisplay" hidden>
+      <!-- Before/After Toggle -->
+      <div class="nova-before-after" id="novaBeforeAfter">
+        <div class="nova-ba-image-container">
+          <img class="nova-ba-image nova-ba-before" id="novaBeforeImg" src="" alt="Original product">
+          <img class="nova-ba-image nova-ba-after" id="novaAfterImg" src="" alt="Try-on result">
+        </div>
+        <div class="nova-ba-toggle">
+          <button class="nova-ba-btn active" id="novaBtnAfter" data-view="after">Try-On</button>
+          <button class="nova-ba-btn" id="novaBtnBefore" data-view="before">Original</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error State (hidden by default) -->
+    <div class="nova-error" id="novaError" hidden>
+      <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#cc0c39" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <p class="nova-error-text" id="novaErrorText">Something went wrong.</p>
+      <button class="nova-btn nova-btn-primary nova-btn-sm" id="novaRetryBtn">Try Again</button>
+    </div>
+  </div>
+
+  <!-- Style Tips Section (hidden by default) -->
+  <div class="nova-style-tips" id="novaStyleTips" hidden>
+    <h3 class="nova-section-heading">Style Tips</h3>
+    <div class="nova-tips-list" id="novaTipsList">
+      <!-- Tip cards inserted dynamically -->
+    </div>
+  </div>
+
+  <!-- Action Buttons -->
+  <div class="nova-actions" id="novaActions" hidden>
+    <div class="nova-actions-row">
+      <button class="nova-btn nova-btn-outlined" id="novaRetryStyle" title="Try a different merge style">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="23 4 23 10 17 10"/>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+        Try Another Style
+      </button>
+      <button class="nova-btn nova-btn-primary" id="novaAnimateBtn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        Animate
+      </button>
+    </div>
+    <!-- Merge style selector (shown on "Try Another Style" click) -->
+    <div class="nova-style-selector" id="novaStyleSelector" hidden>
+      <p class="nova-style-label">Choose merge style:</p>
+      <div class="nova-style-options">
+        <button class="nova-style-option" data-style="BALANCED">Balanced</button>
+        <button class="nova-style-option" data-style="SEAMLESS">Seamless</button>
+        <button class="nova-style-option" data-style="DETAILED">Detailed</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Video Section (hidden by default) -->
+  <div class="nova-video-section" id="novaVideoSection" hidden>
+    <h3 class="nova-section-heading">Your Runway Moment</h3>
+
+    <!-- Video Loading -->
+    <div class="nova-video-loading" id="novaVideoLoading">
+      <div class="nova-progress-bar">
+        <div class="nova-progress-fill" id="novaProgressFill"></div>
+      </div>
+      <p class="nova-video-loading-text">
+        <span class="nova-spinner-small"></span>
+        Creating your runway moment...
+      </p>
+    </div>
+
+    <!-- Video Player (hidden until ready) -->
+    <div class="nova-video-player" id="novaVideoPlayer" hidden>
+      <video id="novaVideo" controls playsinline>
+        Your browser does not support the video tag.
+      </video>
+    </div>
+  </div>
+</div>
+
+<!-- Panel Footer -->
+<div class="nova-panel-footer">
+  <span>Powered by Amazon Nova AI</span>
+</div>

@@ -1,0 +1,433 @@
+/* ==========================================================================
+   NovaTryOnMe - Smart Search Results Page Styles
+   ========================================================================== */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Fix: hidden attribute must override CSS display values */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  font-family: "Amazon Ember", system-ui, -apple-system, Arial, sans-serif;
+  background: #f5f5f5;
+  color: #0f1111;
+  min-height: 100vh;
+}
+
+/* Header */
+.nova-header {
+  background: linear-gradient(135deg, #FF9900 0%, #FF6600 100%);
+  color: #fff;
+  padding: 20px 0;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+}
+
+.nova-header-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.nova-header-title {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.nova-header-subtitle {
+  font-size: 14px;
+  opacity: 0.9;
+  margin-top: 4px;
+}
+
+/* Loading */
+.nova-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  text-align: center;
+  gap: 16px;
+}
+
+.nova-loading h2 {
+  font-size: 20px;
+  color: #0f1111;
+}
+
+.nova-loading p {
+  font-size: 14px;
+  color: #565959;
+  max-width: 400px;
+}
+
+.nova-loading-hint {
+  font-size: 12px;
+  color: #999;
+  font-style: italic;
+}
+
+.nova-loading-timer {
+  font-size: 14px;
+  font-weight: 600;
+  color: #FF9900;
+  margin-top: 4px;
+}
+
+.nova-search-time {
+  font-size: 12px;
+  color: #565959;
+  font-weight: 500;
+  margin-left: auto;
+}
+
+@keyframes nova-spin {
+  to { transform: rotate(360deg); }
+}
+
+.nova-loading-spinner {
+  width: 56px;
+  height: 56px;
+  border: 5px solid #f0f0f0;
+  border-top-color: #FF9900;
+  border-radius: 50%;
+  animation: nova-spin 0.8s linear infinite;
+}
+
+/* Error */
+.nova-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  text-align: center;
+  gap: 12px;
+}
+
+.nova-error-icon {
+  font-size: 48px;
+}
+
+.nova-error h2 {
+  font-size: 20px;
+  color: #cc0c39;
+}
+
+.nova-error p {
+  font-size: 14px;
+  color: #565959;
+}
+
+/* Results */
+.nova-results {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.nova-results-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f1111;
+}
+
+.nova-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: #fff9f0;
+  border: 1px solid #ffd89b;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #c45500;
+}
+
+/* Product Grid */
+.nova-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+/* Product Card */
+.nova-card {
+  background: #fff;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.nova-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+.nova-card-image {
+  width: 100%;
+  height: 260px;
+  object-fit: contain;
+  background: #fff;
+  padding: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.nova-card-body {
+  padding: 14px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nova-card-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #0f1111;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.nova-card-title a {
+  color: #0f1111;
+  text-decoration: none;
+}
+
+.nova-card-title a:hover {
+  color: #c45500;
+  text-decoration: underline;
+}
+
+.nova-card-rating {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #565959;
+}
+
+.nova-card-stars {
+  color: #de7921;
+  font-weight: 600;
+}
+
+.nova-card-popularity {
+  font-size: 11px;
+  color: #067d62;
+  font-weight: 600;
+}
+
+.nova-card-price {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f1111;
+}
+
+.nova-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+/* Buttons */
+.nova-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.nova-btn-primary {
+  background: linear-gradient(135deg, #FF9900 0%, #E88B00 100%);
+  color: #fff;
+  flex: 1;
+}
+
+.nova-btn-primary:hover {
+  background: linear-gradient(135deg, #FFB84D 0%, #FF9900 100%);
+  box-shadow: 0 2px 8px rgba(255, 153, 0, 0.3);
+}
+
+.nova-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.nova-btn-secondary {
+  background: #f0f0f0;
+  color: #0f1111;
+  flex: 1;
+}
+
+.nova-btn-secondary:hover {
+  background: #e0e0e0;
+}
+
+/* Try-On Modal */
+.nova-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nova-modal {
+  background: #fff;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+}
+
+.nova-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #FF9900 0%, #FF6600 100%);
+  color: #fff;
+}
+
+.nova-modal-header h3 {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.nova-modal-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: #fff;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nova-modal-close:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.nova-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.nova-modal-body img {
+  width: 100%;
+  border-radius: 8px;
+}
+
+/* ---------------------------------------------------------------------------
+   Debug Panel (shows images sent to Gemini)
+   --------------------------------------------------------------------------- */
+.nova-tryon-debug-panel {
+  width: 100%;
+  padding: 10px 12px;
+  background: #f9f9f9;
+  border: 1px solid #e7e7e7;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.nova-tryon-debug-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #565959;
+  text-align: center;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.nova-tryon-debug-images {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.nova-tryon-debug-img-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.nova-tryon-debug-img-wrap img {
+  width: 80px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+}
+
+.nova-tryon-debug-img-wrap span {
+  font-size: 9px;
+  color: #888;
+  text-align: center;
+  font-weight: 500;
+}
+
+.nova-tryon-debug-arrow {
+  font-size: 18px;
+  font-weight: 700;
+  color: #FF9900;
+  flex-shrink: 0;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .nova-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+
+  .nova-card-image {
+    height: 180px;
+  }
+
+  .nova-card-actions {
+    flex-direction: column;
+  }
+}

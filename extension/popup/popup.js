@@ -1,0 +1,933 @@
+/**
+ * NovaTryOnMe - Popup Script
+ * Auth wizard + profile management
+ */
+
+const MAX_IMAGE_DIMENSION = 1024;
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const DEFAULT_BACKEND_URL = 'http://localhost:3000';
+
+// State
+let pendingSignupEmail = '';
+let bodyPhotoBase64 = null;
+let facePhotoBase64 = null;
+let editBodyPhotoBase64 = null;
+let editFacePhotoBase64 = null;
+let cachedProfile = null;
+
+// Multi-photo upload state for wizard step 2
+let userPhotos = { body: [null, null, null], face: [null, null] };
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function showView(viewId) {
+  document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+  document.getElementById(viewId).classList.remove('hidden');
+}
+
+function showError(elemId, msg) {
+  const el = document.getElementById(elemId);
+  if (el) el.textContent = msg;
+}
+
+function clearError(elemId) {
+  const el = document.getElementById(elemId);
+  if (el) el.textContent = '';
+}
+
+function setLoading(btn, loading) {
+  if (loading) {
+    btn.classList.add('loading');
+    btn.disabled = true;
+  } else {
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  }
+}
+
+function sendMsg(msg) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(msg, (res) => {
+      if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+      if (res && res.error) return reject(new Error(res.error));
+      resolve(res?.data || res);
+    });
+  });
+}
+
+function processImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Failed to decode image'));
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
+          if (width > height) {
+            height = Math.round(height * (MAX_IMAGE_DIMENSION / width));
+            width = MAX_IMAGE_DIMENSION;
+          } else {
+            width = Math.round(width * (MAX_IMAGE_DIMENSION / height));
+            height = MAX_IMAGE_DIMENSION;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        const base64 = dataUrl.split(',')[1];
+        const sizeKB = Math.round((base64.length * 3) / 4 / 1024);
+        resolve({ base64, width, height, sizeKB });
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function calculateAge(birthday) {
+  const birth = new Date(birthday);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return age;
+}
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+async function handleLogin() {
+  const btn = document.getElementById('loginBtn');
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  clearError('loginError');
+
+  if (!email || !password) {
+    showError('loginError', 'Please enter email and password');
+    return;
+  }
+
+  setLoading(btn, true);
+  try {
+    const tokens = await sendMsg({
+      type: 'API_CALL', endpoint: '/api/auth/login', method: 'POST',
+      data: { email, password }
+    });
+    await chrome.storage.local.set({
+      authTokens: {
+        idToken: tokens.idToken,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresAt: Date.now() + (tokens.expiresIn * 1000),
+      },
+      userEmail: email,
+    });
+    await loadProfileAndRoute();
+  } catch (err) {
+    // If email not verified, resend code and go to verify screen
+    if (err.message.includes('verify your email') || err.message.includes('UserNotConfirmedException')) {
+      pendingSignupEmail = email;
+      await chrome.storage.local.set({ pendingEmail: email, pendingPassword: password });
+      // Resend verification code
+      try {
+        await sendMsg({
+          type: 'API_CALL', endpoint: '/api/auth/resend-code', method: 'POST',
+          data: { email }
+        });
+      } catch (_) { /* ignore resend error */ }
+      document.getElementById('verifyEmailDisplay').textContent = email;
+      showView('viewVerify');
+    } else {
+      showError('loginError', err.message);
+    }
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+async function handleSignup() {
+  const btn = document.getElementById('signupBtn');
+  const email = document.getElementById('signupEmail').value.trim();
+  const password = document.getElementById('signupPassword').value;
+  const confirm = document.getElementById('signupConfirm').value;
+  clearError('signupError');
+
+  if (!email || !password) {
+    showError('signupError', 'Please fill in all fields');
+    return;
+  }
+  if (password !== confirm) {
+    showError('signupError', 'Passwords do not match');
+    return;
+  }
+  if (password.length < 8) {
+    showError('signupError', 'Password must be at least 8 characters');
+    return;
+  }
+
+  setLoading(btn, true);
+  try {
+    await sendMsg({
+      type: 'API_CALL', endpoint: '/api/auth/signup', method: 'POST',
+      data: { email, password }
+    });
+    pendingSignupEmail = email;
+    await chrome.storage.local.set({ pendingEmail: email, pendingPassword: password });
+    document.getElementById('verifyEmailDisplay').textContent = email;
+    showView('viewVerify');
+  } catch (err) {
+    showError('signupError', err.message);
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+async function handleVerify() {
+  const btn = document.getElementById('verifyBtn');
+  const code = document.getElementById('verifyCode').value.trim();
+  clearError('verifyError');
+
+  if (!code || code.length < 6) {
+    showError('verifyError', 'Please enter the 6-digit code');
+    return;
+  }
+
+  setLoading(btn, true);
+  try {
+    const stored = await chrome.storage.local.get(['pendingEmail', 'pendingPassword']);
+    const email = pendingSignupEmail || stored.pendingEmail;
+
+    await sendMsg({
+      type: 'API_CALL', endpoint: '/api/auth/confirm', method: 'POST',
+      data: { email, code }
+    });
+
+    // Auto-login after verification
+    const password = stored.pendingPassword;
+    if (password) {
+      const tokens = await sendMsg({
+        type: 'API_CALL', endpoint: '/api/auth/login', method: 'POST',
+        data: { email, password }
+      });
+      await chrome.storage.local.set({
+        authTokens: {
+          idToken: tokens.idToken,
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          expiresAt: Date.now() + (tokens.expiresIn * 1000),
+        },
+        userEmail: email,
+      });
+      await chrome.storage.local.remove(['pendingEmail', 'pendingPassword']);
+      // Go to wizard step 1
+      showView('viewWizard1');
+    }
+  } catch (err) {
+    showError('verifyError', err.message);
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+async function handleResendCode() {
+  const stored = await chrome.storage.local.get(['pendingEmail']);
+  const email = pendingSignupEmail || stored.pendingEmail;
+  if (!email) return;
+  try {
+    await sendMsg({
+      type: 'API_CALL', endpoint: '/api/auth/resend-code', method: 'POST',
+      data: { email }
+    });
+    showError('verifyError', 'Code resent! Check your email.');
+    document.getElementById('verifyError').style.color = '#067d62';
+  } catch (err) {
+    showError('verifyError', err.message);
+  }
+}
+
+async function handleSignOut() {
+  await chrome.storage.local.remove(['authTokens', 'userEmail']);
+  showView('viewSignIn');
+}
+
+// ---------------------------------------------------------------------------
+// Profile
+// ---------------------------------------------------------------------------
+
+async function loadProfileAndRoute() {
+  try {
+    const profile = await sendMsg({
+      type: 'API_CALL', endpoint: '/api/profile', method: 'GET', data: {}
+    });
+
+    if (profile && profile.profileComplete) {
+      showProfileView(profile);
+    } else if (profile && profile.firstName) {
+      // Partially complete - figure out where they left off
+      if (!profile.bodyPhotoKey) {
+        showView('viewWizard2');
+      } else if (!profile.facePhotoKey) {
+        showView('viewWizard3');
+      } else {
+        showView('viewWizard1');
+      }
+    } else {
+      showView('viewWizard1');
+    }
+  } catch (err) {
+    console.error('[popup] Failed to load profile:', err);
+    showView('viewWizard1');
+  }
+}
+
+async function showProfileView(profile) {
+  cachedProfile = profile;
+  const greeting = document.getElementById('profileGreeting');
+  greeting.textContent = `Hi, ${profile.firstName || 'User'}!`;
+
+  const ageEl = document.getElementById('profileAge');
+  if (profile.age) ageEl.textContent = `${profile.age} years old`;
+
+  const locEl = document.getElementById('profileLocation');
+  const parts = [profile.city, profile.country].filter(Boolean);
+  if (parts.length) locEl.textContent = parts.join(', ');
+
+  // Load favorites count
+  try {
+    const favData = await sendMsg({
+      type: 'API_CALL', endpoint: '/api/favorites', method: 'GET', data: {}
+    });
+    document.getElementById('favoritesCount').textContent = favData.favorites?.length || 0;
+  } catch (_) { /* ignore */ }
+
+  // Load all photos (5 originals + 3 generated)
+  try {
+    const allPhotos = await sendMsg({
+      type: 'API_CALL', endpoint: '/api/profile/photos/all', method: 'GET', data: {}
+    });
+
+    // Show generated photos
+    const genSection = document.getElementById('profileGenerated');
+    if (allPhotos.generated && allPhotos.generated.some(Boolean)) {
+      genSection.hidden = false;
+      for (let i = 0; i < 3; i++) {
+        const img = document.getElementById(`profileGenImg${i}`);
+        if (allPhotos.generated[i]) {
+          img.src = `data:image/jpeg;base64,${allPhotos.generated[i]}`;
+          img.hidden = false;
+        } else {
+          img.hidden = true;
+        }
+      }
+    } else {
+      genSection.hidden = true;
+    }
+
+    // Show original photos
+    const origSection = document.getElementById('profileOriginals');
+    if (allPhotos.originals && allPhotos.originals.some(Boolean)) {
+      origSection.hidden = false;
+      for (let i = 0; i < 5; i++) {
+        const img = document.getElementById(`profileOrigImg${i}`);
+        if (allPhotos.originals[i]) {
+          img.src = `data:image/jpeg;base64,${allPhotos.originals[i]}`;
+          img.hidden = false;
+        } else {
+          img.hidden = true;
+        }
+      }
+    } else {
+      origSection.hidden = true;
+    }
+  } catch (_) {
+    // Hide photo sections if API fails
+    document.getElementById('profileGenerated').hidden = true;
+    document.getElementById('profileOriginals').hidden = true;
+  }
+
+  showView('viewProfile');
+  checkBackendHealth('profileStatusDot', 'profileStatusText');
+  loadDebugTryOnImages();
+}
+
+// ---------------------------------------------------------------------------
+// Debug Try-On Images (loaded from chrome.storage, set by content script)
+// ---------------------------------------------------------------------------
+
+async function loadDebugTryOnImages() {
+  const section = document.getElementById('debugTryOnSection');
+  if (!section) return;
+  try {
+    const stored = await chrome.storage.local.get(['tryOnDebug']);
+    const debug = stored.tryOnDebug;
+    if (!debug || !debug.userPhoto || !debug.garmentPhoto) {
+      section.hidden = true;
+      return;
+    }
+    document.getElementById('debugUserPhoto').src = debug.userPhoto;
+    document.getElementById('debugGarmentPhoto').src = debug.garmentPhoto;
+    const extracted = debug.garmentImageUsed === 'extracted';
+    document.getElementById('debugGarmentLabel').textContent = extracted ? 'Garment (extracted)' : 'Garment (original)';
+    section.hidden = false;
+  } catch (_) {
+    section.hidden = true;
+  }
+}
+
+// Listen for storage changes to update debug images in real-time
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.tryOnDebug) {
+    loadDebugTryOnImages();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Edit Profile (single-page, all sections visible)
+// ---------------------------------------------------------------------------
+
+async function showEditProfile() {
+  editBodyPhotoBase64 = null;
+  editFacePhotoBase64 = null;
+
+  // Pre-fill personal info from cached profile
+  if (cachedProfile) {
+    document.getElementById('editFirstName').value = cachedProfile.firstName || '';
+    document.getElementById('editLastName').value = cachedProfile.lastName || '';
+    document.getElementById('editBirthday').value = cachedProfile.birthday || '';
+    document.getElementById('editCountry').value = cachedProfile.country || '';
+    document.getElementById('editCity').value = cachedProfile.city || '';
+    if (cachedProfile.birthday) {
+      const age = calculateAge(cachedProfile.birthday);
+      document.getElementById('editAgeDisplay').textContent = age > 0 ? `Age: ${age}` : '';
+    }
+  }
+
+  // Reset photo upload states
+  document.getElementById('editBodyPreview').hidden = true;
+  document.getElementById('editBodySaveBtn').hidden = true;
+  document.getElementById('editFacePreview').hidden = true;
+  document.getElementById('editFaceSaveBtn').hidden = true;
+
+  // Load current photos
+  try {
+    const bodyData = await sendMsg({
+      type: 'API_CALL', endpoint: '/api/profile/photo/body', method: 'GET', data: {}
+    });
+    if (bodyData.image) {
+      document.getElementById('editBodyCurrentImg').src = `data:image/jpeg;base64,${bodyData.image}`;
+    }
+  } catch (_) { /* ignore */ }
+
+  try {
+    const faceData = await sendMsg({
+      type: 'API_CALL', endpoint: '/api/profile/photo/face', method: 'GET', data: {}
+    });
+    if (faceData.image) {
+      document.getElementById('editFaceCurrentImg').src = `data:image/jpeg;base64,${faceData.image}`;
+    }
+  } catch (_) { /* ignore */ }
+
+  showView('viewEditProfile');
+}
+
+async function handleEditSaveInfo() {
+  const btn = document.getElementById('editSaveInfoBtn');
+  const firstName = document.getElementById('editFirstName').value.trim();
+  const lastName = document.getElementById('editLastName').value.trim();
+  const birthday = document.getElementById('editBirthday').value;
+  const country = document.getElementById('editCountry').value;
+  const city = document.getElementById('editCity').value.trim();
+
+  if (!firstName || !lastName) {
+    alert('Please enter your first and last name.');
+    return;
+  }
+
+  setLoading(btn, true);
+  try {
+    await sendMsg({
+      type: 'API_CALL', endpoint: '/api/profile', method: 'PUT',
+      data: { firstName, lastName, birthday, country, city }
+    });
+    btn.textContent = 'Saved!';
+    setTimeout(() => { btn.textContent = 'Save Info'; }, 1500);
+  } catch (err) {
+    alert('Failed to save: ' + err.message);
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+async function handleEditBodyUpload(file) {
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    alert('Please upload a JPEG, PNG, or WebP image.');
+    return;
+  }
+  try {
+    const result = await processImage(file);
+    editBodyPhotoBase64 = result.base64;
+    document.getElementById('editBodyPreview').hidden = false;
+    document.getElementById('editBodyPreviewImg').src = `data:image/jpeg;base64,${result.base64}`;
+    document.getElementById('editBodyInfo').textContent = `${result.width} x ${result.height} - ${result.sizeKB} KB`;
+    document.getElementById('editBodySaveBtn').hidden = false;
+  } catch (err) {
+    alert('Failed to process image: ' + err.message);
+  }
+}
+
+async function handleEditBodySave() {
+  if (!editBodyPhotoBase64) return;
+  const btn = document.getElementById('editBodySaveBtn');
+  setLoading(btn, true);
+  try {
+    await sendMsg({
+      type: 'API_CALL', endpoint: '/api/profile/photos', method: 'POST',
+      data: { type: 'body', image: editBodyPhotoBase64 }
+    });
+    await chrome.storage.local.set({ bodyPhoto: editBodyPhotoBase64 });
+    // Update current preview
+    document.getElementById('editBodyCurrentImg').src = `data:image/jpeg;base64,${editBodyPhotoBase64}`;
+    document.getElementById('editBodyPreview').hidden = true;
+    btn.hidden = true;
+    editBodyPhotoBase64 = null;
+  } catch (err) {
+    alert('Failed to upload body photo: ' + err.message);
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+async function handleEditFaceUpload(file) {
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    alert('Please upload a JPEG, PNG, or WebP image.');
+    return;
+  }
+  try {
+    const result = await processImage(file);
+    editFacePhotoBase64 = result.base64;
+    document.getElementById('editFacePreview').hidden = false;
+    document.getElementById('editFacePreviewImg').src = `data:image/jpeg;base64,${result.base64}`;
+    document.getElementById('editFaceInfo').textContent = `${result.width} x ${result.height} - ${result.sizeKB} KB`;
+    document.getElementById('editFaceSaveBtn').hidden = false;
+  } catch (err) {
+    alert('Failed to process image: ' + err.message);
+  }
+}
+
+async function handleEditFaceSave() {
+  if (!editFacePhotoBase64) return;
+  const btn = document.getElementById('editFaceSaveBtn');
+  setLoading(btn, true);
+  try {
+    await sendMsg({
+      type: 'API_CALL', endpoint: '/api/profile/photos', method: 'POST',
+      data: { type: 'face', image: editFacePhotoBase64 }
+    });
+    await chrome.storage.local.set({ facePhoto: editFacePhotoBase64 });
+    document.getElementById('editFaceCurrentImg').src = `data:image/jpeg;base64,${editFacePhotoBase64}`;
+    document.getElementById('editFacePreview').hidden = true;
+    btn.hidden = true;
+    editFacePhotoBase64 = null;
+  } catch (err) {
+    alert('Failed to upload face photo: ' + err.message);
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Wizard
+// ---------------------------------------------------------------------------
+
+async function handleWizard1Next() {
+  const firstName = document.getElementById('firstName').value.trim();
+  const lastName = document.getElementById('lastName').value.trim();
+  const birthday = document.getElementById('birthday').value;
+  const country = document.getElementById('country').value;
+  const city = document.getElementById('city').value.trim();
+
+  if (!firstName || !lastName) {
+    alert('Please enter your first and last name.');
+    return;
+  }
+
+  try {
+    await sendMsg({
+      type: 'API_CALL', endpoint: '/api/profile', method: 'PUT',
+      data: { firstName, lastName, birthday, country, city }
+    });
+    // Open as a full tab for photo upload (popup closes when file dialogs open)
+    openAsTab('wizard2');
+  } catch (err) {
+    alert('Failed to save: ' + err.message);
+  }
+}
+
+/**
+ * Open popup.html in a full browser tab so file dialogs work reliably.
+ * Chrome extension popups close when system dialogs (file picker) open,
+ * losing all JS state. Tabs don't have this problem.
+ */
+function openAsTab(step) {
+  const url = chrome.runtime.getURL('popup/popup.html') + '?step=' + step;
+  chrome.tabs.create({ url });
+  // Close the popup if we're in one
+  if (!isRunningAsTab()) window.close();
+}
+
+function isRunningAsTab() {
+  return window.location.search.includes('step=');
+}
+
+// ---------------------------------------------------------------------------
+// Multi-photo upload for wizard step 2
+// ---------------------------------------------------------------------------
+
+async function handleMultiPhotoUpload(category, index, file) {
+  console.log(`[upload] handleMultiPhotoUpload called: ${category} ${index}, file: ${file.name} (${file.type})`);
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    alert('Please upload a JPEG, PNG, or WebP image.');
+    return;
+  }
+  try {
+    const result = await processImage(file);
+    console.log(`[upload] processImage done: ${result.width}x${result.height}, ${result.sizeKB}KB`);
+    userPhotos[category][index] = result.base64;
+
+    // Update preview
+    const previewId = `${category}Preview${index}`;
+    const preview = document.getElementById(previewId);
+    if (preview) {
+      preview.src = `data:image/jpeg;base64,${result.base64}`;
+      preview.hidden = false;
+    }
+
+    // Enable "Generate" button when all 5 photos are uploaded
+    const allFilled = userPhotos.body.every(Boolean) && userPhotos.face.every(Boolean);
+    document.getElementById('wizard2Next').disabled = !allFilled;
+    console.log(`[upload] allFilled: ${allFilled}`);
+  } catch (err) {
+    console.error(`[upload] error:`, err);
+    alert('Failed to process image: ' + err.message);
+  }
+}
+
+
+async function handleWizard2Next() {
+  const allFilled = userPhotos.body.every(Boolean) && userPhotos.face.every(Boolean);
+  if (!allFilled) return;
+
+  const btn = document.getElementById('wizard2Next');
+  setLoading(btn, true);
+
+  // Move to wizard3 and start generation
+  showView('viewWizard3');
+
+  // Reset progress UI
+  for (let i = 0; i < 3; i++) {
+    const step = document.getElementById(`genStep${i}`);
+    step.querySelector('.gen-step-icon').innerHTML = '&#9711;';
+    step.classList.remove('gen-step-done', 'gen-step-active', 'gen-step-error');
+    step.querySelector('.gen-step-time').textContent = '';
+    document.getElementById(`genImg${i}`).hidden = true;
+  }
+  document.getElementById('wizard3Done').hidden = true;
+  clearError('genError');
+
+  try {
+    // Mark first step as active
+    document.getElementById('genStep0').classList.add('gen-step-active');
+    document.getElementById('genStep0').querySelector('.gen-step-icon').innerHTML = '&#8987;';
+
+    const userImages = [...userPhotos.body, ...userPhotos.face];
+    const startTime = Date.now();
+
+    const result = await sendMsg({
+      type: 'API_CALL', endpoint: '/api/profile/generate-photos', method: 'POST',
+      data: { userImages }
+    });
+
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    // Update progress UI with results
+    if (result.generatedPhotos) {
+      for (let i = 0; i < 3; i++) {
+        const step = document.getElementById(`genStep${i}`);
+        step.classList.remove('gen-step-active');
+        if (result.generatedPhotos[i]) {
+          step.classList.add('gen-step-done');
+          step.querySelector('.gen-step-icon').innerHTML = '&#10003;';
+          const img = document.getElementById(`genImg${i}`);
+          img.src = `data:image/jpeg;base64,${result.generatedPhotos[i]}`;
+          img.hidden = false;
+        } else {
+          step.classList.add('gen-step-error');
+          step.querySelector('.gen-step-icon').innerHTML = '&#10007;';
+        }
+      }
+      document.getElementById('genStep2').querySelector('.gen-step-time').textContent = `${totalTime}s total`;
+    }
+
+    // Store first generated photo locally for try-on backward compat
+    if (result.generatedPhotos && result.generatedPhotos[0]) {
+      await chrome.storage.local.set({ bodyPhoto: result.generatedPhotos[0] });
+    }
+
+    // Show complete button
+    document.getElementById('wizard3Done').hidden = false;
+  } catch (err) {
+    showError('genError', 'Generation failed: ' + err.message);
+    // Mark all steps as error
+    for (let i = 0; i < 3; i++) {
+      const step = document.getElementById(`genStep${i}`);
+      step.classList.remove('gen-step-active');
+      step.classList.add('gen-step-error');
+      step.querySelector('.gen-step-icon').innerHTML = '&#10007;';
+    }
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+async function handleWizard3Done() {
+  if (isRunningAsTab()) {
+    // Close the tab — user will open popup normally to see profile
+    window.close();
+  } else {
+    await loadProfileAndRoute();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Upload Area Setup
+// ---------------------------------------------------------------------------
+
+function setupUploadArea(areaId, inputId, handler) {
+  const area = document.getElementById(areaId);
+  const input = document.getElementById(inputId);
+  if (!area || !input) return;
+
+  area.addEventListener('click', () => input.click());
+  input.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) handler(e.target.files[0]);
+  });
+  area.addEventListener('dragenter', (e) => { e.preventDefault(); area.classList.add('drag-over'); });
+  area.addEventListener('dragover', (e) => { e.preventDefault(); area.classList.add('drag-over'); });
+  area.addEventListener('dragleave', (e) => { e.preventDefault(); area.classList.remove('drag-over'); });
+  area.addEventListener('drop', (e) => {
+    e.preventDefault();
+    area.classList.remove('drag-over');
+    if (e.dataTransfer.files.length > 0) handler(e.dataTransfer.files[0]);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Backend Health
+// ---------------------------------------------------------------------------
+
+async function checkBackendHealth(dotId, textId) {
+  dotId = dotId || 'statusDot';
+  textId = textId || 'statusText';
+  const dot = document.getElementById(dotId);
+  const text = document.getElementById(textId);
+  if (!dot || !text) return;
+
+  const stored = await chrome.storage.local.get(['backendUrl']);
+  const url = stored.backendUrl || DEFAULT_BACKEND_URL;
+
+  try {
+    const resp = await fetch(`${url}/health`, { signal: AbortSignal.timeout(5000) });
+    if (resp.ok) {
+      dot.className = 'status-dot connected';
+      text.textContent = 'Backend connected';
+    } else {
+      dot.className = 'status-dot disconnected';
+      text.textContent = `Backend error (${resp.status})`;
+    }
+  } catch (_) {
+    dot.className = 'status-dot disconnected';
+    text.textContent = 'Backend unreachable';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Backend URL
+// ---------------------------------------------------------------------------
+
+async function saveBackendUrl() {
+  const input = document.getElementById('backendUrlInput');
+  if (!input) return;
+  const url = input.value.trim();
+  if (!url) return;
+  await chrome.storage.local.set({ backendUrl: url });
+  const btn = document.getElementById('saveUrlBtn');
+  if (btn) {
+    const orig = btn.textContent;
+    btn.textContent = 'Saved!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  }
+  checkBackendHealth('profileStatusDot', 'profileStatusText');
+}
+
+// ---------------------------------------------------------------------------
+// Smart Search
+// ---------------------------------------------------------------------------
+
+async function handleSmartSearch() {
+  const input = document.getElementById('smartSearchInput');
+  const btn = document.getElementById('smartSearchBtn');
+  const errorEl = document.getElementById('smartSearchError');
+  const query = input.value.trim();
+
+  errorEl.textContent = '';
+
+  if (!query) {
+    errorEl.textContent = 'Please enter a search query';
+    return;
+  }
+
+  // Open the results page in a new tab with the query
+  const resultsUrl = chrome.runtime.getURL('smart-search/results.html') + '?q=' + encodeURIComponent(query);
+  chrome.tabs.create({ url: resultsUrl });
+}
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+
+async function init() {
+  // Bind auth events
+  document.getElementById('loginBtn').addEventListener('click', handleLogin);
+  document.getElementById('signupBtn').addEventListener('click', handleSignup);
+  document.getElementById('verifyBtn').addEventListener('click', handleVerify);
+  document.getElementById('goToSignUp').addEventListener('click', (e) => { e.preventDefault(); showView('viewSignUp'); });
+  document.getElementById('goToSignIn').addEventListener('click', (e) => { e.preventDefault(); showView('viewSignIn'); });
+  document.getElementById('resendCode').addEventListener('click', (e) => { e.preventDefault(); handleResendCode(); });
+  document.getElementById('signOutBtn').addEventListener('click', handleSignOut);
+
+  // Enter key on login/signup
+  document.getElementById('loginPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') handleLogin(); });
+  document.getElementById('signupConfirm').addEventListener('keydown', (e) => { if (e.key === 'Enter') handleSignup(); });
+  document.getElementById('verifyCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') handleVerify(); });
+
+  // Wizard events
+  document.getElementById('wizard1Next').addEventListener('click', handleWizard1Next);
+  document.getElementById('wizard2Back').addEventListener('click', () => showView('viewWizard1'));
+  document.getElementById('wizard2Next').addEventListener('click', handleWizard2Next);
+  document.getElementById('wizard3Done').addEventListener('click', handleWizard3Done);
+
+  // Birthday auto-age
+  document.getElementById('birthday').addEventListener('change', (e) => {
+    const age = calculateAge(e.target.value);
+    document.getElementById('ageDisplay').textContent = age > 0 ? `Age: ${age}` : '';
+  });
+
+  // Upload inputs for wizard step 2 — plain visible file inputs
+  [['bodyFileInput0','body',0],['bodyFileInput1','body',1],['bodyFileInput2','body',2],
+   ['faceFileInput0','face',0],['faceFileInput1','face',1]].forEach(([id, cat, idx]) => {
+    const input = document.getElementById(id);
+    console.log(`[init] Setting up ${id}: found=${!!input}`);
+    if (input) input.addEventListener('change', (e) => {
+      console.log(`[init] change event on ${id}, files: ${e.target.files.length}`);
+      if (e.target.files.length > 0) handleMultiPhotoUpload(cat, idx, e.target.files[0]);
+    });
+  });
+
+  // Smart Search
+  document.getElementById('smartSearchBtn').addEventListener('click', handleSmartSearch);
+  document.getElementById('smartSearchInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleSmartSearch();
+  });
+
+  // Edit profile
+  document.getElementById('editProfileBtn').addEventListener('click', showEditProfile);
+  document.getElementById('editProfileBack').addEventListener('click', () => loadProfileAndRoute());
+  document.getElementById('editSaveInfoBtn').addEventListener('click', handleEditSaveInfo);
+  document.getElementById('editBodySaveBtn').addEventListener('click', handleEditBodySave);
+  document.getElementById('editFaceSaveBtn').addEventListener('click', handleEditFaceSave);
+
+  // Edit profile birthday auto-age
+  document.getElementById('editBirthday').addEventListener('change', (e) => {
+    const age = calculateAge(e.target.value);
+    document.getElementById('editAgeDisplay').textContent = age > 0 ? `Age: ${age}` : '';
+  });
+
+  // Edit profile upload areas — "Change Photo" buttons trigger file inputs
+  document.getElementById('editBodyUploadBtn').addEventListener('click', () => {
+    document.getElementById('editBodyFileInput').click();
+  });
+  document.getElementById('editBodyFileInput').addEventListener('change', (e) => {
+    if (e.target.files.length > 0) handleEditBodyUpload(e.target.files[0]);
+  });
+  document.getElementById('editFaceUploadBtn').addEventListener('click', () => {
+    document.getElementById('editFaceFileInput').click();
+  });
+  document.getElementById('editFaceFileInput').addEventListener('change', (e) => {
+    if (e.target.files.length > 0) handleEditFaceUpload(e.target.files[0]);
+  });
+
+  // Backend URL
+  const saveUrlBtn = document.getElementById('saveUrlBtn');
+  if (saveUrlBtn) saveUrlBtn.addEventListener('click', saveBackendUrl);
+
+  // Load backend URL
+  const stored = await chrome.storage.local.get(['backendUrl']);
+  const urlInput = document.getElementById('backendUrlInput');
+  if (urlInput) urlInput.value = stored.backendUrl || DEFAULT_BACKEND_URL;
+
+  // Check if opened as tab with a specific step (e.g. ?step=wizard2)
+  const urlParams = new URLSearchParams(window.location.search);
+  const forceStep = urlParams.get('step');
+
+  // Check auth state
+  const authData = await chrome.storage.local.get(['authTokens']);
+  if (authData.authTokens && authData.authTokens.idToken) {
+    // Check if token is expired
+    if (authData.authTokens.expiresAt && authData.authTokens.expiresAt > Date.now()) {
+      if (forceStep) {
+        // forceStep is like "wizard2" → viewId is "viewWizard2"
+        showView('view' + forceStep[0].toUpperCase() + forceStep.slice(1));
+      } else {
+        await loadProfileAndRoute();
+      }
+    } else if (authData.authTokens.refreshToken) {
+      // Try refresh
+      try {
+        const newTokens = await sendMsg({
+          type: 'API_CALL', endpoint: '/api/auth/refresh', method: 'POST',
+          data: { refreshToken: authData.authTokens.refreshToken }
+        });
+        await chrome.storage.local.set({
+          authTokens: {
+            ...authData.authTokens,
+            idToken: newTokens.idToken,
+            accessToken: newTokens.accessToken,
+            expiresAt: Date.now() + (newTokens.expiresIn * 1000),
+          }
+        });
+        if (forceStep) {
+          showView('view' + forceStep[0].toUpperCase() + forceStep.slice(1));
+        } else {
+          await loadProfileAndRoute();
+        }
+      } catch (_) {
+        showView('viewSignIn');
+      }
+    } else {
+      showView('viewSignIn');
+    }
+  } else {
+    showView('viewSignIn');
+  }
+
+  checkBackendHealth();
+}
+
+document.addEventListener('DOMContentLoaded', init);

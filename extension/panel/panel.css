@@ -1,0 +1,557 @@
+/* ==========================================================================
+   NovaTryOnMe - Side Panel Stylesheet
+   Injected into Amazon product pages. All rules prefixed with .nova- to
+   avoid collisions with Amazon's own stylesheets.
+   ========================================================================== */
+
+/* ---- Panel Container ---- */
+.nova-tryon-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 420px;
+  height: 100vh;
+  background: #ffffff;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Amazon Ember', Arial, sans-serif;
+  font-size: 14px;
+  color: #0f1111;
+  line-height: 1.5;
+  transform: translateX(100%);
+  animation: nova-slide-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.nova-tryon-panel.nova-closing {
+  animation: nova-slide-out 0.3s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+}
+
+@keyframes nova-slide-in {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+@keyframes nova-slide-out {
+  from { transform: translateX(0); }
+  to   { transform: translateX(100%); }
+}
+
+/* ---- Header ---- */
+.nova-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #232f3e;
+  flex-shrink: 0;
+}
+
+.nova-panel-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nova-panel-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.3px;
+}
+
+.nova-panel-close {
+  background: none;
+  border: none;
+  color: #aab7c4;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s, background 0.2s;
+}
+
+.nova-panel-close:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ---- Scrollable Content ---- */
+.nova-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.nova-panel-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.nova-panel-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.nova-panel-content::-webkit-scrollbar-thumb {
+  background: #d5d9d9;
+  border-radius: 3px;
+}
+
+.nova-panel-content::-webkit-scrollbar-thumb:hover {
+  background: #aab7c4;
+}
+
+/* ---- Product Info ---- */
+.nova-product-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #f7f8fa;
+  border-radius: 10px;
+  border: 1px solid #e3e6ef;
+}
+
+.nova-product-thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #e3e6ef;
+  flex-shrink: 0;
+}
+
+.nova-product-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.nova-product-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f1111;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.nova-product-category {
+  font-size: 11px;
+  color: #565959;
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ---- Section Headings ---- */
+.nova-section-heading {
+  font-size: 13px;
+  font-weight: 700;
+  color: #232f3e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+/* ---- Loading State ---- */
+.nova-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nova-skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: nova-shimmer 1.5s ease-in-out infinite;
+  border-radius: 10px;
+}
+
+.nova-skeleton-image {
+  width: 100%;
+  height: 320px;
+}
+
+@keyframes nova-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.nova-loading-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #565959;
+  font-weight: 500;
+}
+
+.nova-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #e3e6ef;
+  border-top-color: #FF9900;
+  border-radius: 50%;
+  animation: nova-spin 0.8s linear infinite;
+}
+
+.nova-spinner-small {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #e3e6ef;
+  border-top-color: #FF9900;
+  border-radius: 50%;
+  animation: nova-spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+@keyframes nova-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---- Result Display ---- */
+.nova-result-display {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Before/After Toggle */
+.nova-before-after {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nova-ba-image-container {
+  position: relative;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  background: #f7f8fa;
+}
+
+.nova-ba-image {
+  width: 100%;
+  display: block;
+  transition: opacity 0.4s ease;
+}
+
+.nova-ba-before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  opacity: 0;
+}
+
+.nova-ba-before.visible {
+  opacity: 1;
+}
+
+.nova-ba-after {
+  opacity: 1;
+}
+
+.nova-ba-after.hidden {
+  opacity: 0;
+}
+
+.nova-ba-toggle {
+  display: flex;
+  background: #f0f2f5;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.nova-ba-btn {
+  flex: 1;
+  padding: 7px 12px;
+  border: none;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #565959;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.nova-ba-btn.active {
+  background: #ffffff;
+  color: #0f1111;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.nova-ba-btn:hover:not(.active) {
+  color: #0f1111;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* ---- Error State ---- */
+.nova-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.nova-error-text {
+  font-size: 13px;
+  color: #565959;
+}
+
+/* ---- Style Tips ---- */
+.nova-style-tips {
+  display: flex;
+  flex-direction: column;
+}
+
+.nova-tips-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nova-tip-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fef9f0;
+  border-radius: 8px;
+  border: 1px solid #fce4b8;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.nova-tip-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(255, 153, 0, 0.1);
+}
+
+.nova-tip-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, #FF9900, #FFB84D);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 14px;
+}
+
+.nova-tip-text {
+  font-size: 12px;
+  color: #333;
+  line-height: 1.5;
+}
+
+/* ---- Buttons ---- */
+.nova-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 10px 16px;
+  transition: all 0.2s ease;
+}
+
+.nova-btn:active {
+  transform: translateY(1px);
+}
+
+.nova-btn-primary {
+  background: linear-gradient(to bottom, #FFB84D, #FF9900);
+  color: #0f1111;
+  border: 1px solid #e88b00;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.nova-btn-primary:hover {
+  background: linear-gradient(to bottom, #FFC266, #FFAD33);
+  box-shadow: 0 2px 6px rgba(255, 153, 0, 0.25);
+}
+
+.nova-btn-outlined {
+  background: #ffffff;
+  color: #0f1111;
+  border: 1px solid #d5d9d9;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.nova-btn-outlined:hover {
+  background: #f7f8f8;
+  border-color: #c0c4c4;
+}
+
+.nova-btn-sm {
+  padding: 7px 14px;
+  font-size: 12px;
+}
+
+/* ---- Actions Row ---- */
+.nova-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nova-actions-row {
+  display: flex;
+  gap: 8px;
+}
+
+.nova-actions-row .nova-btn {
+  flex: 1;
+}
+
+/* ---- Style Selector ---- */
+.nova-style-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: #f7f8fa;
+  border-radius: 8px;
+  border: 1px solid #e3e6ef;
+  animation: nova-fade-in 0.25s ease;
+}
+
+.nova-style-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #565959;
+}
+
+.nova-style-options {
+  display: flex;
+  gap: 6px;
+}
+
+.nova-style-option {
+  flex: 1;
+  padding: 8px 10px;
+  border: 2px solid #d5d9d9;
+  border-radius: 8px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f1111;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.nova-style-option:hover {
+  border-color: #FF9900;
+  background: #fff9f0;
+}
+
+.nova-style-option.selected {
+  border-color: #FF9900;
+  background: #fef3e0;
+  color: #c7511f;
+}
+
+@keyframes nova-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- Video Section ---- */
+.nova-video-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.nova-video-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nova-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: #e3e6ef;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.nova-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #FF9900, #FFB84D, #FF9900);
+  background-size: 200% 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+  animation: nova-progress-stripe 1.5s linear infinite;
+}
+
+@keyframes nova-progress-stripe {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.nova-video-loading-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #565959;
+  font-weight: 500;
+}
+
+.nova-video-player {
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.nova-video-player video {
+  width: 100%;
+  display: block;
+  border-radius: 10px;
+}
+
+/* ---- Footer ---- */
+.nova-panel-footer {
+  padding: 10px 16px;
+  text-align: center;
+  border-top: 1px solid #e3e6ef;
+  background: #f7f8fa;
+  flex-shrink: 0;
+}
+
+.nova-panel-footer span {
+  font-size: 10px;
+  color: #999;
+  font-weight: 500;
+}
+
+/* ---- Utility ---- */
+.nova-hidden {
+  display: none !important;
+}
