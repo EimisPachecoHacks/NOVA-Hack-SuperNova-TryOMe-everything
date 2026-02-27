@@ -446,6 +446,121 @@ async function loadPoseAndFramingState() {
 // ---------------------------------------------------------------------------
 // Edit Profile (single-page, all sections visible)
 // ---------------------------------------------------------------------------
+// Favorites View
+// ---------------------------------------------------------------------------
+async function showFavoritesView() {
+  showView('viewFavorites');
+  const container = document.getElementById('favoritesListContainer');
+  container.innerHTML = '<div class="favorites-empty">Loading...</div>';
+
+  try {
+    const favData = await sendMsg({
+      type: 'API_CALL', endpoint: '/api/favorites', method: 'GET', data: {}
+    });
+    console.log('[popup] Raw favData response:', JSON.stringify(favData).substring(0, 500));
+    const favorites = favData.favorites || [];
+    console.log(`[popup] Favorites loaded: ${favorites.length}`);
+    favorites.forEach((f, i) => {
+      console.log(`[popup]   [${i}] asin=${f.asin}`);
+      console.log(`[popup]     tryOnResultKey="${f.tryOnResultKey || '(empty)'}"`);
+      console.log(`[popup]     tryOnResultUrl=${f.tryOnResultUrl ? 'YES (' + f.tryOnResultUrl.substring(0, 80) + '...)' : 'NO'}`);
+      console.log(`[popup]     productImage=${f.productImage ? 'YES' : 'NO'}`);
+      console.log(`[popup]     ALL KEYS:`, Object.keys(f));
+    });
+
+    if (favorites.length === 0) {
+      container.innerHTML = '<div class="favorites-empty">No favorites yet.<br>Use the &#9825; button on try-on results to save items here.</div>';
+      return;
+    }
+
+    // Sort by savedAt descending (newest first)
+    favorites.sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
+
+    container.innerHTML = '<div class="favorites-list" id="favoritesList"></div>';
+    const list = document.getElementById('favoritesList');
+
+    favorites.forEach((fav) => {
+      const card = document.createElement('div');
+      card.className = 'fav-card';
+
+      const productImg = fav.productImage || '';
+      const hasTryOnKey = !!fav.tryOnResultKey;
+      const title = fav.productTitle || fav.asin || 'Unknown product';
+      const category = fav.category || fav.garmentClass || '';
+      const date = fav.savedAt ? new Date(fav.savedAt).toLocaleDateString() : '';
+
+      card.innerHTML = `
+        <div class="fav-card-images">
+          ${hasTryOnKey ? `<img class="fav-card-img fav-card-tryon" id="tryonImg_${fav.asin}" src="" alt="Try-on" style="display:none">` : ''}
+          ${productImg ? `<img class="fav-card-img fav-card-product" src="${productImg}" alt="Product">` : ''}
+        </div>
+        <div class="fav-card-body">
+          <div class="fav-card-title">${title}</div>
+          <div class="fav-card-meta">${[category, date].filter(Boolean).join(' · ')}</div>
+        </div>
+        <button class="fav-card-remove" title="Remove" data-asin="${fav.asin}">&times;</button>
+      `;
+
+      // Click card → open Amazon product page
+      card.addEventListener('click', (e) => {
+        if (e.target.classList.contains('fav-card-remove')) return;
+        if (fav.asin) {
+          chrome.tabs.create({ url: `https://www.amazon.com/dp/${fav.asin}` });
+        }
+      });
+
+      // Remove button
+      const removeBtn = card.querySelector('.fav-card-remove');
+      removeBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          await sendMsg({
+            type: 'API_CALL', endpoint: `/api/favorites/${fav.asin}`, method: 'DELETE', data: {}
+          });
+          card.remove();
+          // Update count and check if list is now empty
+          const remaining = list.querySelectorAll('.fav-card').length;
+          if (remaining === 0) {
+            container.innerHTML = '<div class="favorites-empty">No favorites yet.<br>Use the &#9825; button on try-on results to save items here.</div>';
+          }
+        } catch (err) {
+          console.error('[popup] Failed to remove favorite:', err);
+        }
+      });
+
+      list.appendChild(card);
+
+      // Fetch try-on image from S3 via backend proxy
+      if (hasTryOnKey) {
+        sendMsg({
+          type: 'API_CALL', endpoint: `/api/favorites/${fav.asin}/image`, method: 'GET', data: {}
+        }).then((imgData) => {
+          if (imgData && imgData.image) {
+            const imgEl = document.getElementById(`tryonImg_${fav.asin}`);
+            if (imgEl) {
+              imgEl.src = `data:image/jpeg;base64,${imgData.image}`;
+              imgEl.style.display = '';
+              imgEl.style.cursor = 'pointer';
+              imgEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                document.getElementById('lightboxImg').src = imgEl.src;
+                document.getElementById('imageLightbox').classList.add('active');
+              });
+              console.log(`[popup] Try-on image loaded for ${fav.asin}`);
+            }
+          }
+        }).catch((err) => {
+          console.warn(`[popup] Failed to load try-on image for ${fav.asin}:`, err.message);
+        });
+      }
+    });
+  } catch (err) {
+    console.error('[popup] Failed to load favorites:', err);
+    container.innerHTML = '<div class="favorites-empty">Failed to load favorites.</div>';
+  }
+}
+
+// ---------------------------------------------------------------------------
 
 async function showEditProfile() {
   editBodyPhotoBase64 = null;
@@ -954,6 +1069,10 @@ async function init() {
 
   // Pose & Framing controls
   setupPoseAndFramingControls();
+
+  // Favorites click → show favorites view
+  document.getElementById('profileFavorites').addEventListener('click', showFavoritesView);
+  document.getElementById('favBackBtn').addEventListener('click', () => loadProfileAndRoute());
 
   // Backend URL
   const saveUrlBtn = document.getElementById('saveUrlBtn');

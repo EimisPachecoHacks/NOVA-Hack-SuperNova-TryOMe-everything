@@ -30,6 +30,7 @@
   let lastImageUrl = null; // Track last image URL to detect real changes
   let tryOnEnabled = false; // Toggle switch state: when ON, swatch clicks auto-trigger try-on
   let currentFraming = 'full'; // half or full body framing
+  let tryOnRequestId = 0; // Incremented per try-on call to prevent stale results
 
   // ---------------------------------------------------------------------------
   // Initialization
@@ -99,7 +100,7 @@
     // Re-trigger try-on if overlay is open and pose or framing changed
     if ((changes.selectedPoseIndex || changes.tryOnFraming) && overlayCard && currentPhotos) {
       console.log("[NovaTryOnMe] Pose/framing changed — re-triggering try-on");
-      performTryOn(currentPhotos, currentIsCosmetic);
+      performTryOn(overlayCard, currentPhotos, currentIsCosmetic);
     }
   });
 
@@ -403,10 +404,17 @@
   }
 
   async function performTryOn(card, photos, isCosmetic) {
-    const body = card.querySelector(".nova-tryon-overlay-body");
+    const body = card && card.querySelector ? card.querySelector(".nova-tryon-overlay-body") : null;
+    if (!body) {
+      console.warn("[NovaTryOnMe] performTryOn: no overlay body found, skipping.");
+      return;
+    }
+
+    // Concurrency guard: each call gets an ID; if a newer call starts, older ones stop updating the UI
+    const thisRequestId = ++tryOnRequestId;
 
     console.log(
-      "%c 🔥 TRY-ON START %c " + (isCosmetic ? "COSMETIC" : "CLOTHING"),
+      "%c 🔥 TRY-ON START %c " + (isCosmetic ? "COSMETIC" : "CLOTHING") + " (req#" + thisRequestId + ")",
       "background:#FF6600;color:#fff;font-weight:bold;padding:4px 8px;border-radius:4px;font-size:14px;",
       "color:#FF6600;font-weight:bold;font-size:14px;"
     );
@@ -444,6 +452,13 @@
         // Log all backend pipeline steps
         logDebugSteps(debugInfo);
       }
+
+      // If a newer try-on was started while we were waiting, discard this result
+      if (thisRequestId !== tryOnRequestId) {
+        console.log(`[NovaTryOnMe] Discarding stale try-on result (req#${thisRequestId}, current is req#${tryOnRequestId})`);
+        return;
+      }
+
       // Display the result (minimal overlay — controls are in the side panel)
       body.innerHTML = `
         <div class="nova-tryon-result">
@@ -503,7 +518,11 @@
               return;
             }
 
-            await ApiClient.addFavorite({
+            console.log("[NovaTryOnMe] SAVE FAVORITE — asin:", productData.asin);
+            console.log("[NovaTryOnMe]   productImage:", productData.imageUrl ? "YES (" + productData.imageUrl.substring(0, 60) + "...)" : "NO");
+            console.log("[NovaTryOnMe]   tryOnResultImage:", resultImage ? "YES (length=" + resultImage.length + ", starts=" + resultImage.substring(0, 30) + "...)" : "NO/EMPTY");
+
+            const favResult = await ApiClient.addFavorite({
               asin: productData.asin || "",
               productTitle: productData.title || "",
               productImage: productData.imageUrl || "",
@@ -511,6 +530,7 @@
               garmentClass: analysisResult ? analysisResult.garmentClass : "",
               tryOnResultImage: resultImage,
             });
+            console.log("[NovaTryOnMe]   Save result:", JSON.stringify(favResult).substring(0, 200));
 
             favBtn.innerHTML = '<span class="nova-tryon-favorite-icon">\u2665</span> Saved!';
             favBtn.classList.add("nova-tryon-favorite-btn--saved");
