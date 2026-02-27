@@ -37,6 +37,12 @@
   async function init() {
     console.log("[NovaTryOnMe] Content script initializing...");
 
+    // Load framing preference from storage
+    try {
+      const stored = await chrome.storage.local.get(["tryOnFraming"]);
+      if (stored.tryOnFraming) currentFraming = stored.tryOnFraming;
+    } catch (_) {}
+
     // 1. Scrape the product page
     productData = scrapeProductData();
     if (!productData.imageUrl) {
@@ -422,9 +428,9 @@
         );
         resultImage = response.resultImage;
       } else {
-        // Backend does full 5-step pipeline — poseIndex tells it which S3 pose to use
+        // Send null as bodyImage so backend fetches the correct pose from S3 using poseIndex
         const response = await ApiClient.tryOn(
-          photos.bodyPhoto,
+          null,
           productImageBase64,
           analysisResult ? analysisResult.garmentClass : null,
           "SEAMLESS",
@@ -458,9 +464,25 @@
         </button>
       `;
 
-      // Store debug images so the popup panel can display them
+      // Store debug images — fetch the actual pose used from backend
       if (debugInfo) {
-        storeDebugImages(photos.bodyPhoto, productImageBase64, debugInfo);
+        // Get the pose image the backend actually used (from S3 via poseIndex)
+        let debugBodyPhoto = photos.bodyPhoto;
+        try {
+          const allPhotos = await new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({
+              type: "API_CALL", endpoint: "/api/profile/photos/all", method: "GET", data: {}
+            }, (res) => {
+              if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+              if (res && res.error) return reject(new Error(res.error));
+              resolve(res?.data || res);
+            });
+          });
+          if (allPhotos.generated && allPhotos.generated[currentPoseIdx]) {
+            debugBodyPhoto = allPhotos.generated[currentPoseIdx];
+          }
+        } catch (_) {}
+        storeDebugImages(debugBodyPhoto, productImageBase64, debugInfo);
       }
 
       // Favorites button handler

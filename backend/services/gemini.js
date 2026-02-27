@@ -24,8 +24,9 @@ function getClient() {
 function buildSmartPrompt(garmentClass, outfitInfo, framing) {
   const currentType = outfitInfo?.currentType || "UPPER_LOWER";
 
-  // Half-body framing instruction for UPPER_BODY garments
-  const FRAMING_SUFFIX = (framing === "half" && garmentClass === "UPPER_BODY")
+  // Half-body framing instruction (waist-up) — applicable to upper body garments and full body
+  const upperBodyTypes = ["UPPER_BODY", "LONG_SLEEVE_SHIRT", "SHORT_SLEEVE_SHIRT", "NO_SLEEVE_SHIRT", "FULL_BODY", "LONG_DRESS", "SHORT_DRESS", "FULL_BODY_OUTFIT"];
+  const FRAMING_SUFFIX = (framing === "half" && upperBodyTypes.includes(garmentClass))
     ? " Frame the output as a half-body photo from the waist up. Do not show legs or feet."
     : "";
 
@@ -99,16 +100,17 @@ function buildSmartPrompt(garmentClass, outfitInfo, framing) {
  * Sends person image + garment image with a smart context-aware prompt
  * Returns base64 result image
  */
-async function virtualTryOn(sourceImageBase64, referenceImageBase64, garmentClass, outfitInfo) {
+async function virtualTryOn(sourceImageBase64, referenceImageBase64, garmentClass, outfitInfo, framing) {
   console.log(`\x1b[1m\x1b[34m  ┌─── GEMINI VIRTUAL TRY-ON ───┐\x1b[0m`);
   console.log(`\x1b[34m  │ garmentClass:\x1b[0m \x1b[1m${garmentClass}\x1b[0m`);
   console.log(`\x1b[34m  │ outfitType:\x1b[0m   \x1b[1m${outfitInfo?.currentType || "UNKNOWN"}\x1b[0m`);
+  console.log(`\x1b[34m  │ framing:\x1b[0m      \x1b[1m${framing || "full"}\x1b[0m`);
   console.log(`\x1b[34m  │ sourceImage:\x1b[0m  ${sourceImageBase64?.length || 0} chars`);
   console.log(`\x1b[34m  │ refImage:\x1b[0m     ${referenceImageBase64?.length || 0} chars`);
 
   const client = getClient();
 
-  const prompt = buildSmartPrompt(garmentClass, outfitInfo);
+  const prompt = buildSmartPrompt(garmentClass, outfitInfo, framing);
   const strategy = outfitInfo?.currentType === "FULL_BODY" && (garmentClass === "UPPER_BODY" || garmentClass === "LOWER_BODY") ? "CONFLICT RESOLUTION" : "STANDARD";
   console.log(`\x1b[34m  │ strategy:\x1b[0m     \x1b[1m\x1b[33m${strategy}\x1b[0m`);
   console.log(`\x1b[34m  │ prompt:\x1b[0m       ${prompt.substring(0, 120)}...`);

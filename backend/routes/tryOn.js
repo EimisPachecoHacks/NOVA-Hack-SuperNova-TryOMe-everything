@@ -203,7 +203,7 @@ router.post("/", optionalAuth, async (req, res, next) => {
       console.log(`\x1b[36m    sourceImage:\x1b[0m       ${sourceImage.length} chars (user body)`);
       console.log(`\x1b[36m    garmentImage:\x1b[0m      ${garmentImageForTryOn.length} chars (${garmentImageUsed})`);
       const s5 = Date.now();
-      resultImage = await geminiVirtualTryOn(sourceImage, garmentImageForTryOn, garmentClass, outfitInfo);
+      resultImage = await geminiVirtualTryOn(sourceImage, garmentImageForTryOn, garmentClass, outfitInfo, framing);
       const s5t = ((Date.now() - s5) / 1000).toFixed(1);
       console.log(`\x1b[32m  ✓ STEP 5 COMPLETE\x1b[0m \x1b[90m(${s5t}s)\x1b[0m — result: ${resultImage ? resultImage.length : 0} chars`);
       debugSteps.push({ step: "5", name: "TRY-ON GENERATION", model: "Gemini 2.5 Flash Image", time: s5t + "s", result: { imageLength: resultImage ? resultImage.length : 0 } });
