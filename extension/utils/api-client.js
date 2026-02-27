@@ -7,10 +7,6 @@
  */
 
 class ApiClient {
-  constructor(baseUrl = "http://localhost:3000") {
-    this.baseUrl = baseUrl;
-  }
-
   // ---------------------------------------------------------------------------
   // Static helpers for content-script usage (message passing through background)
   // ---------------------------------------------------------------------------
@@ -29,10 +25,6 @@ class ApiClient {
     });
   }
 
-  static call(endpoint, data) {
-    return ApiClient._sendMessage({ type: "API_CALL", endpoint, data });
-  }
-
   // --- Product Analysis ---
 
   static analyzeProduct(imageBase64, title, breadcrumbs) {
@@ -46,13 +38,15 @@ class ApiClient {
 
   // --- Virtual Try-On ---
 
-  static tryOn(bodyImageBase64, garmentImageBase64, garmentClass, mergeStyle = "SEAMLESS") {
+  static tryOn(bodyImageBase64, garmentImageBase64, garmentClass, mergeStyle = "SEAMLESS", framing = "full", poseIndex = 0) {
     return ApiClient._sendMessage({
       type: "TRY_ON",
       bodyImageBase64,
       garmentImageBase64,
       garmentClass,
       mergeStyle,
+      framing,
+      poseIndex,
     });
   }
 
@@ -201,36 +195,4 @@ class ApiClient {
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // Instance methods (direct fetch, for use outside content scripts)
-  // ---------------------------------------------------------------------------
-
-  async post(endpoint, body) {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`API error ${response.status}: ${errorText}`);
-    }
-
-    return response.json();
-  }
-
-  async get(endpoint) {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`API error ${response.status}: ${errorText}`);
-    }
-
-    return response.json();
-  }
 }

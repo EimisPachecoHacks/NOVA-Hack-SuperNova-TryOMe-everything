@@ -612,3 +612,130 @@ select.text-input { cursor: pointer; }
   animation: spin 0.6s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- Generation Success Message ---- */
+.gen-success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+.gen-success-icon {
+  font-size: 20px;
+  color: #059669;
+  flex-shrink: 0;
+}
+.gen-success-text {
+  font-size: 13px;
+  color: #065f46;
+  line-height: 1.4;
+}
+
+/* ---- Clickable Images ---- */
+.clickable-img { cursor: pointer; transition: opacity 0.15s; }
+.clickable-img:hover { opacity: 0.85; }
+
+/* ---- Image Lightbox ---- */
+.lightbox {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.lightbox.active {
+  display: flex;
+}
+.lightbox-backdrop {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+}
+.lightbox-content {
+  position: relative;
+  max-width: 90%;
+  max-height: 90%;
+}
+.lightbox-img {
+  max-width: 100%;
+  max-height: 85vh;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+.lightbox-close {
+  position: absolute;
+  top: -12px; right: -12px;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: #fff;
+  color: #333;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.lightbox-close:hover { background: #f0f0f0; }
+
+/* ---- Pose & Framing Controls ---- */
+.nova-tryon-settings {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin: 10px 0;
+  padding: 8px 0;
+  border-top: 1px solid #eee;
+  border-bottom: 1px solid #eee;
+}
+.nova-setting-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.nova-setting-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.nova-setting-btns {
+  display: flex;
+  gap: 3px;
+}
+.nova-setting-btn {
+  padding: 3px 10px;
+  border: 1.5px solid #d5d9d9;
+  border-radius: 6px;
+  background: #fff;
+  color: #333;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+.nova-setting-btn:hover {
+  border-color: #FF9900;
+  background: #fff8ee;
+}
+.nova-setting-btn.selected {
+  border-color: #FF9900;
+  background: #FF9900;
+  color: #fff;
+}
+
+/* Active pose highlight on generated photo */
+.profile-gen-img.pose-active {
+  border-color: #FF9900;
+  box-shadow: 0 0 0 2px rgba(255, 153, 0, 0.3);
+}

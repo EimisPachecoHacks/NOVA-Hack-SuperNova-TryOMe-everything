@@ -21,13 +21,18 @@ function getClient() {
  * @param {object} outfitInfo - Classification of what the person is currently wearing
  * @returns {string} The prompt to send to the image generation model
  */
-function buildSmartPrompt(garmentClass, outfitInfo) {
+function buildSmartPrompt(garmentClass, outfitInfo, framing) {
   const currentType = outfitInfo?.currentType || "UPPER_LOWER";
+
+  // Half-body framing instruction for UPPER_BODY garments
+  const FRAMING_SUFFIX = (framing === "half" && garmentClass === "UPPER_BODY")
+    ? " Frame the output as a half-body photo from the waist up. Do not show legs or feet."
+    : "";
 
   // Concise suffix — identity is handled via image labeling + system instruction in API call
   const STUDIO_SUFFIX =
     "CRITICAL: The output MUST be the EXACT same person from the first image — same face, same skin tone, same body, same hair. Do NOT generate a different person. " +
-    "White studio background. Photorealistic. Output only the image.";
+    "White studio background. Photorealistic. Output only the image." + FRAMING_SUFFIX;
 
   // --- No conflict cases ---
 
@@ -291,4 +296,4 @@ OUTPUT REQUIREMENTS:
   throw new Error("No image in Gemini profile photo response");
 }
 
-module.exports = { virtualTryOn, extractGarment, getClient, buildSmartPrompt, generateProfilePhoto };
+module.exports = { virtualTryOn, extractGarment, buildSmartPrompt, generateProfilePhoto };

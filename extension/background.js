@@ -190,14 +190,34 @@ async function proxyImageFetch(imageUrl) {
 }
 
 async function getStoredPhotos() {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(["bodyPhoto", "facePhoto"], (result) => {
-      resolve({
-        bodyPhoto: result.bodyPhoto || null,
-        facePhoto: result.facePhoto || null,
-      });
-    });
-  });
+  const result = await chrome.storage.local.get(["bodyPhoto", "facePhoto", "selectedPoseIndex"]);
+  let bodyPhoto = result.bodyPhoto || null;
+  let facePhoto = result.facePhoto || null;
+  const selectedPoseIndex = result.selectedPoseIndex ?? 0;
+
+  // If photos are missing from local storage, fetch from backend (S3)
+  if (!bodyPhoto || !facePhoto) {
+    try {
+      const allPhotos = await apiGet("/api/profile/photos/all");
+      if (!bodyPhoto && allPhotos.generated && allPhotos.generated[selectedPoseIndex]) {
+        bodyPhoto = allPhotos.generated[selectedPoseIndex];
+        // Cache locally for next time
+        await chrome.storage.local.set({ bodyPhoto });
+      }
+      if (!facePhoto && allPhotos.originals) {
+        // Use last original as face photo (face photos are uploaded last in wizard)
+        const faceImg = allPhotos.originals[allPhotos.originals.length - 1];
+        if (faceImg) {
+          facePhoto = faceImg;
+          await chrome.storage.local.set({ facePhoto });
+        }
+      }
+    } catch (err) {
+      console.warn("[background] Failed to fetch photos from backend:", err.message);
+    }
+  }
+
+  return { bodyPhoto, facePhoto, selectedPoseIndex };
 }
 
 // ---------------------------------------------------------------------------
@@ -236,6 +256,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             referenceImage: message.garmentImageBase64,
             garmentClass: message.garmentClass,
             mergeStyle: message.mergeStyle || "SEAMLESS",
+            framing: message.framing || "full",
+            poseIndex: message.poseIndex ?? 0,
           });
           sendResponse({ data: result });
           break;

@@ -6,7 +6,7 @@
  *
  * Dependencies (loaded before this file via manifest content_scripts):
  *   - utils/amazon-scraper.js  -> scrapeProductData()
- *   - utils/image-utils.js     -> fetchImageAsBase64(), resizeImage(), cropToAspectRatio(), base64ToDataUrl()
+ *   - utils/image-utils.js     -> fetchImageAsBase64(), cropToAspectRatio(), base64ToDataUrl()
  *   - utils/api-client.js      -> ApiClient (static methods use message passing)
  */
 
@@ -29,6 +29,7 @@
   let currentIsCosmetic = false; // Cached cosmetic flag
   let lastImageUrl = null; // Track last image URL to detect real changes
   let tryOnEnabled = false; // Toggle switch state: when ON, swatch clicks auto-trigger try-on
+  let currentFraming = 'full'; // half or full body framing
 
   // ---------------------------------------------------------------------------
   // Initialization
@@ -79,30 +80,22 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Analysis Badge
+  // Listen for pose/framing changes from the side panel
   // ---------------------------------------------------------------------------
-  function injectBadge() {
-    // Find the product image container to place the badge
-    const imageContainer =
-      document.querySelector("#imgTagWrapperId") ||
-      document.querySelector("#imageBlock") ||
-      document.querySelector("#main-image-container");
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
 
-    if (!imageContainer) return;
-
-    // Ensure the container has relative positioning for absolute badge placement
-    const containerStyle = window.getComputedStyle(imageContainer);
-    if (containerStyle.position === "static") {
-      imageContainer.style.position = "relative";
+    if (changes.tryOnFraming) {
+      currentFraming = changes.tryOnFraming.newValue || 'full';
+      console.log("[NovaTryOnMe] Framing changed to:", currentFraming);
     }
 
-    const badge = document.createElement("div");
-    badge.className = "nova-tryon-badge";
-    badge.innerHTML = `<span class="nova-tryon-badge-dot"></span> SuperNova TryOnMe`;
-
-    imageContainer.appendChild(badge);
-    console.log("[NovaTryOnMe] Analysis badge injected.");
-  }
+    // Re-trigger try-on if overlay is open and pose or framing changed
+    if ((changes.selectedPoseIndex || changes.tryOnFraming) && overlayCard && currentPhotos) {
+      console.log("[NovaTryOnMe] Pose/framing changed — re-triggering try-on");
+      performTryOn(currentPhotos, currentIsCosmetic);
+    }
+  });
 
   // ---------------------------------------------------------------------------
   // "Try It On" Button
@@ -416,6 +409,11 @@
       let resultImage;
       let debugInfo = null;
 
+      // Read selected pose index (stored locally, backend fetches actual image from S3)
+      const currentPoseIdx = await new Promise((resolve) => {
+        chrome.storage.local.get(["selectedPoseIndex"], (r) => resolve(r.selectedPoseIndex || 0));
+      });
+
       if (isCosmetic) {
         const response = await ApiClient.tryOnCosmetics(
           photos.facePhoto,
@@ -424,12 +422,14 @@
         );
         resultImage = response.resultImage;
       } else {
-        // Backend does full 5-step pipeline — no need to pass garmentClass
+        // Backend does full 5-step pipeline — poseIndex tells it which S3 pose to use
         const response = await ApiClient.tryOn(
           photos.bodyPhoto,
           productImageBase64,
           analysisResult ? analysisResult.garmentClass : null,
-          "SEAMLESS"
+          "SEAMLESS",
+          currentFraming,
+          currentPoseIdx
         );
         resultImage = response.resultImage;
         debugInfo = response.debug;
@@ -437,8 +437,7 @@
         // Log all backend pipeline steps
         logDebugSteps(debugInfo);
       }
-
-      // Display the result (overlay is clean — no debug panel here)
+      // Display the result (minimal overlay — controls are in the side panel)
       body.innerHTML = `
         <div class="nova-tryon-result">
           <img src="${base64ToDataUrl(resultImage)}" alt="Virtual try-on result" />
@@ -504,6 +503,7 @@
       animateBtn.addEventListener("click", () =>
         handleAnimate(body, resultImage, animateBtn)
       );
+
     } catch (err) {
       console.error("%c ✗ TRY-ON FAILED %c " + err.message, "background:#f44336;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px;", "color:#f44336;font-weight:bold;");
       body.innerHTML = `
@@ -545,10 +545,23 @@
    * This replaces MutationObserver which proved unreliable against Amazon's
    * aggressive Twister DOM rebuilds.
    */
+  let lastPageUrl = null; // Track page URL for navigation detection
+
   function setupVariationObserver() {
     lastImageUrl = productData.imageUrl;
+    lastPageUrl = location.href;
 
     watchdogInterval = setInterval(() => {
+      // (c) Check for page URL change (SPA navigation to new product)
+      const currentPageUrl = location.href;
+      if (currentPageUrl !== lastPageUrl && !watchdogBusy) {
+        console.log("[NovaTryOnMe] Watchdog: PAGE URL CHANGED");
+        console.log("[NovaTryOnMe]   old URL:", lastPageUrl);
+        console.log("[NovaTryOnMe]   new URL:", currentPageUrl);
+        lastPageUrl = currentPageUrl;
+        handlePageNavigation();
+      }
+
       // (a) Ensure button is always present
       if (!document.querySelector(".nova-tryon-btn")) {
         console.log("[NovaTryOnMe] Watchdog: button missing, re-injecting...");
@@ -642,6 +655,72 @@
     } else if (!panelOpen && currentPhotos) {
       // Overlay was closed but toggle is still ON — re-open it
       openOverlay(currentPhotos, currentIsCosmetic);
+    }
+
+    watchdogBusy = false;
+  }
+
+  /**
+   * Handle page navigation (SPA-style URL change on Amazon).
+   * Re-scrapes product data and auto-triggers try-on if enabled.
+   */
+  async function handlePageNavigation() {
+    watchdogBusy = true;
+    console.log("[NovaTryOnMe] === PAGE NAVIGATION HANDLER ===");
+
+    // Re-scrape the new product page
+    const newProductData = scrapeProductData();
+    if (!newProductData.imageUrl) {
+      console.warn("[NovaTryOnMe] New page has no product image, skipping.");
+      watchdogBusy = false;
+      return;
+    }
+
+    productData = newProductData;
+    lastImageUrl = productData.imageUrl;
+    console.log("[NovaTryOnMe]   New product:", productData.title);
+
+    // Re-fetch the product image
+    try {
+      productImageBase64 = await fetchImageAsBase64(productData.imageUrl);
+    } catch (err) {
+      console.error("[NovaTryOnMe] Failed to fetch new product image:", err);
+      watchdogBusy = false;
+      return;
+    }
+
+    // Re-analyze the product
+    try {
+      analysisResult = await ApiClient.analyzeProduct(
+        productImageBase64,
+        productData.title,
+        productData.breadcrumbs
+      );
+      console.log("[NovaTryOnMe]   Analysis result:", JSON.stringify(analysisResult));
+    } catch (err) {
+      console.warn("[NovaTryOnMe] Product analysis failed:", err.message);
+    }
+
+    // Re-inject button if needed (new page may not have it)
+    if (!document.querySelector(".nova-tryon-btn")) {
+      injectTryOnButton();
+    }
+
+    // Auto-trigger try-on if enabled
+    if (tryOnEnabled && currentPhotos) {
+      const isCosmetic =
+        analysisResult &&
+        analysisResult.category &&
+        analysisResult.category.toLowerCase().includes("cosmetic");
+      currentIsCosmetic = isCosmetic;
+
+      // Close existing overlay and open fresh one
+      if (panelOpen && overlayCard) {
+        overlayCard.remove();
+        overlayCard = null;
+        panelOpen = false;
+      }
+      openOverlay(currentPhotos, isCosmetic);
     }
 
     watchdogBusy = false;

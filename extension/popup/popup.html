@@ -244,6 +244,10 @@
           <img class="gen-result-img" id="genImg2" hidden alt="Pose 3">
         </div>
 
+        <div class="gen-success" id="genSuccess" hidden>
+          <span class="gen-success-icon">&#10003;</span>
+          <p class="gen-success-text">Your AI profile is ready! You can now try on clothes virtually.</p>
+        </div>
         <div class="error-msg" id="genError"></div>
         <button class="btn btn-primary btn-full" id="wizard3Done" hidden>Complete Setup</button>
       </div>
@@ -361,20 +365,38 @@
         <div class="profile-generated" id="profileGenerated">
           <div class="profile-gen-label">AI Generated Profile</div>
           <div class="profile-gen-grid">
-            <img class="profile-gen-img" id="profileGenImg0" alt="Pose 1">
-            <img class="profile-gen-img" id="profileGenImg1" alt="Pose 2">
-            <img class="profile-gen-img" id="profileGenImg2" alt="Pose 3">
+            <img class="profile-gen-img clickable-img" id="profileGenImg0" alt="Pose 1">
+            <img class="profile-gen-img clickable-img" id="profileGenImg1" alt="Pose 2">
+            <img class="profile-gen-img clickable-img" id="profileGenImg2" alt="Pose 3">
+          </div>
+        </div>
+        <!-- Pose & Framing Controls -->
+        <div class="nova-tryon-settings" id="tryonSettings">
+          <div class="nova-setting-group">
+            <span class="nova-setting-label">Pose</span>
+            <div class="nova-setting-btns" id="poseBtns">
+              <button class="nova-setting-btn selected" data-pose="0">A</button>
+              <button class="nova-setting-btn" data-pose="1">B</button>
+              <button class="nova-setting-btn" data-pose="2">C</button>
+            </div>
+          </div>
+          <div class="nova-setting-group">
+            <span class="nova-setting-label">Framing</span>
+            <div class="nova-setting-btns" id="framingBtns">
+              <button class="nova-setting-btn selected" data-framing="full">Full Body</button>
+              <button class="nova-setting-btn" data-framing="half">Half Body</button>
+            </div>
           </div>
         </div>
         <!-- Original Photos (small thumbnails) -->
         <div class="profile-originals" id="profileOriginals">
           <div class="profile-orig-label">Your Original Photos</div>
           <div class="profile-orig-grid">
-            <img class="profile-orig-img" id="profileOrigImg0" alt="Original 1">
-            <img class="profile-orig-img" id="profileOrigImg1" alt="Original 2">
-            <img class="profile-orig-img" id="profileOrigImg2" alt="Original 3">
-            <img class="profile-orig-img" id="profileOrigImg3" alt="Original 4">
-            <img class="profile-orig-img" id="profileOrigImg4" alt="Original 5">
+            <img class="profile-orig-img clickable-img" id="profileOrigImg0" alt="Original 1">
+            <img class="profile-orig-img clickable-img" id="profileOrigImg1" alt="Original 2">
+            <img class="profile-orig-img clickable-img" id="profileOrigImg2" alt="Original 3">
+            <img class="profile-orig-img clickable-img" id="profileOrigImg3" alt="Original 4">
+            <img class="profile-orig-img clickable-img" id="profileOrigImg4" alt="Original 5">
           </div>
         </div>
         <div class="profile-info">
@@ -436,6 +458,15 @@
     </div>
 
   </main>
+
+  <!-- Image Lightbox Modal -->
+  <div class="lightbox" id="imageLightbox">
+    <div class="lightbox-backdrop"></div>
+    <div class="lightbox-content">
+      <img class="lightbox-img" id="lightboxImg" alt="Full size photo">
+      <button class="lightbox-close" id="lightboxClose">&times;</button>
+    </div>
+  </div>
 
   <footer class="footer">
     <p>Powered by Amazon Nova AI</p>

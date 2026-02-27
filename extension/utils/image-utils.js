@@ -1,47 +1,9 @@
 /**
  * NovaTryOnMe - Image Utility Functions
  *
- * Provides helpers for resizing, cropping, fetching, and converting images.
+ * Provides helpers for cropping, fetching, and converting images.
  * All functions work with base64-encoded strings.
  */
-
-/**
- * Resize an image while maintaining its aspect ratio.
- *
- * @param {string} base64 - base64-encoded image (with or without data: prefix)
- * @param {number} maxWidth - Maximum width in pixels
- * @param {number} maxHeight - Maximum height in pixels
- * @returns {Promise<string>} Resized image as base64 JPEG (no data: prefix)
- */
-async function resizeImage(base64, maxWidth, maxHeight) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      // Calculate new dimensions preserving aspect ratio
-      let { width, height } = img;
-      const ratio = Math.min(maxWidth / width, maxHeight / height, 1);
-      width = Math.round(width * ratio);
-      height = Math.round(height * ratio);
-
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0, width, height);
-
-      // Export as JPEG at 85% quality
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-      resolve(dataUrl.split(",")[1]);
-    };
-    img.onerror = () => reject(new Error("Failed to load image for resizing"));
-
-    // Ensure the source has a data: prefix for the Image element
-    img.src = base64.startsWith("data:")
-      ? base64
-      : `data:image/jpeg;base64,${base64}`;
-  });
-}
 
 /**
  * Center-crop an image to a target aspect ratio, then resize to exact dimensions.
@@ -152,42 +114,4 @@ async function fetchImageAsBase64(url) {
  */
 function base64ToDataUrl(base64, mimeType) {
   return `data:${mimeType || "image/jpeg"};base64,${base64}`;
-}
-
-/**
- * Convert a base64 string to a Blob.
- *
- * @param {string} base64 - Raw base64 string (no data: prefix)
- * @param {string} [mimeType='image/jpeg'] - MIME type for the blob
- * @returns {Blob} The resulting Blob object
- */
-function base64ToBlob(base64, mimeType) {
-  mimeType = mimeType || "image/jpeg";
-  const byteString = atob(base64);
-  const arrayBuffer = new ArrayBuffer(byteString.length);
-  const uint8Array = new Uint8Array(arrayBuffer);
-
-  for (let i = 0; i < byteString.length; i++) {
-    uint8Array[i] = byteString.charCodeAt(i);
-  }
-
-  return new Blob([uint8Array], { type: mimeType });
-}
-
-/**
- * Convert a Blob to a base64 string.
- *
- * @param {Blob} blob - The Blob to convert
- * @returns {Promise<string>} base64 string (no data: prefix)
- */
-function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      // Strip the data:...;base64, prefix
-      resolve(reader.result.split(",")[1]);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
 }

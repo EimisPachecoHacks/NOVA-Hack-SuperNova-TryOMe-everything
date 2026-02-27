@@ -1,6 +1,17 @@
 const { ConverseCommand } = require("@aws-sdk/client-bedrock-runtime");
 const { bedrockClient } = require("./bedrock");
 
+/**
+ * Detect image format from base64 string prefix.
+ * Bedrock requires the correct format — hardcoding "jpeg" fails for PNG images.
+ */
+function detectImageFormat(base64String) {
+  if (base64String.startsWith("iVBOR")) return "png";
+  if (base64String.startsWith("/9j/")) return "jpeg";
+  if (base64String.startsWith("UklG")) return "webp";
+  return "jpeg"; // fallback
+}
+
 async function analyzeProduct(imageBase64, title, breadcrumbs) {
   const systemPrompt = `You are a product classification assistant for a virtual try-on shopping app.
 Analyze the product image and information provided, then return a JSON response with the following structure:
@@ -36,7 +47,7 @@ IMPORTANT: Return ONLY valid JSON, no additional text.`;
       content: [
         {
           image: {
-            format: "jpeg",
+            format: detectImageFormat(imageBase64),
             source: { bytes: Buffer.from(imageBase64, "base64") }
           }
         },
@@ -112,7 +123,7 @@ IMPORTANT: Return ONLY valid JSON, no additional text.`;
       content: [
         {
           image: {
-            format: "jpeg",
+            format: detectImageFormat(imageBase64),
             source: { bytes: Buffer.from(imageBase64, "base64") }
           }
         },
@@ -177,7 +188,7 @@ IMPORTANT: Return ONLY valid JSON, no additional text.`;
       content: [
         {
           image: {
-            format: "jpeg",
+            format: detectImageFormat(imageBase64),
             source: { bytes: Buffer.from(imageBase64, "base64") }
           }
         },

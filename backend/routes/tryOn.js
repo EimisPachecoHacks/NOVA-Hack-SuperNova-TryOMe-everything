@@ -32,13 +32,19 @@ async function fetchPhotoFromS3(key) {
 
 router.post("/", optionalAuth, async (req, res, next) => {
   try {
-    let { sourceImage, referenceImage, garmentClass, mergeStyle } = req.body;
+    let { sourceImage, referenceImage, garmentClass, mergeStyle, framing, poseIndex } = req.body;
 
     // If authenticated and no sourceImage provided, fetch from S3
     if (!sourceImage && req.userId) {
       const profile = await getProfile(req.userId);
-      if (profile && profile.bodyPhotoKey) {
-        sourceImage = await fetchPhotoFromS3(profile.bodyPhotoKey);
+      if (profile) {
+        // Use selected pose from generatedPhotoKeys, fallback to bodyPhotoKey
+        const idx = typeof poseIndex === "number" ? poseIndex : 0;
+        if (profile.generatedPhotoKeys && profile.generatedPhotoKeys[idx]) {
+          sourceImage = await fetchPhotoFromS3(profile.generatedPhotoKeys[idx]);
+        } else if (profile.bodyPhotoKey) {
+          sourceImage = await fetchPhotoFromS3(profile.bodyPhotoKey);
+        }
       }
     }
 
@@ -177,7 +183,7 @@ router.post("/", optionalAuth, async (req, res, next) => {
     // ═══════════════════════════════════════════════════
     // STEP 4: CONFLICT MATRIX (buildSmartPrompt)
     // ═══════════════════════════════════════════════════
-    const smartPrompt = buildSmartPrompt(garmentClass, outfitInfo);
+    const smartPrompt = buildSmartPrompt(garmentClass, outfitInfo, framing);
     const strategy = outfitInfo?.currentType === "FULL_BODY" && (garmentClass === "UPPER_BODY" || garmentClass === "LOWER_BODY") ? "CONFLICT RESOLUTION" : "STANDARD";
     console.log(`\n\x1b[1m\x1b[35m▶ STEP 4: CONFLICT MATRIX [buildSmartPrompt]\x1b[0m`);
     console.log(`\x1b[90m  ℹ Determine try-on strategy and build the context-aware prompt for Gemini\x1b[0m`);

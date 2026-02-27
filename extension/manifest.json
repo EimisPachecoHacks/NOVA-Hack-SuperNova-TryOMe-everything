@@ -29,7 +29,6 @@
         "utils/amazon-scraper.js",
         "utils/image-utils.js",
         "utils/api-client.js",
-        "panel/panel.js",
         "content.js"
       ],
       "css": [
@@ -54,13 +53,6 @@
     "128": "icons/icon128.png"
   },
   "web_accessible_resources": [
-    {
-      "resources": ["panel/panel.html", "panel/panel.css"],
-      "matches": [
-        "https://www.amazon.com/*",
-        "https://www.amazon.co.uk/*"
-      ]
-    },
     {
       "resources": [
         "smart-search/results.html",

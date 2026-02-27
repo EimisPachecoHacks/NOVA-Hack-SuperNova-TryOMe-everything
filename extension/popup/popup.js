@@ -355,6 +355,7 @@ async function showProfileView(profile) {
   showView('viewProfile');
   checkBackendHealth('profileStatusDot', 'profileStatusText');
   loadDebugTryOnImages();
+  loadPoseAndFramingState();
 }
 
 // ---------------------------------------------------------------------------
@@ -387,6 +388,60 @@ chrome.storage.onChanged.addListener((changes, area) => {
     loadDebugTryOnImages();
   }
 });
+
+// ---------------------------------------------------------------------------
+// Pose & Framing Controls
+// ---------------------------------------------------------------------------
+
+function setupPoseAndFramingControls() {
+  // Pose buttons
+  document.querySelectorAll('#poseBtns .nova-setting-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const poseIndex = parseInt(btn.dataset.pose, 10);
+      document.querySelectorAll('#poseBtns .nova-setting-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      chrome.storage.local.set({ selectedPoseIndex: poseIndex });
+
+      // Highlight the corresponding generated photo
+      for (let i = 0; i < 3; i++) {
+        const img = document.getElementById(`profileGenImg${i}`);
+        if (img) img.classList.toggle('pose-active', i === poseIndex);
+      }
+    });
+  });
+
+  // Framing buttons
+  document.querySelectorAll('#framingBtns .nova-setting-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const framing = btn.dataset.framing;
+      document.querySelectorAll('#framingBtns .nova-setting-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      chrome.storage.local.set({ tryOnFraming: framing });
+    });
+  });
+}
+
+async function loadPoseAndFramingState() {
+  const stored = await chrome.storage.local.get(['selectedPoseIndex', 'tryOnFraming']);
+  const poseIndex = stored.selectedPoseIndex || 0;
+  const framing = stored.tryOnFraming || 'full';
+
+  // Update pose buttons
+  document.querySelectorAll('#poseBtns .nova-setting-btn').forEach((btn) => {
+    btn.classList.toggle('selected', parseInt(btn.dataset.pose, 10) === poseIndex);
+  });
+
+  // Highlight active generated photo
+  for (let i = 0; i < 3; i++) {
+    const img = document.getElementById(`profileGenImg${i}`);
+    if (img) img.classList.toggle('pose-active', i === poseIndex);
+  }
+
+  // Update framing buttons
+  document.querySelectorAll('#framingBtns .nova-setting-btn').forEach((btn) => {
+    btn.classList.toggle('selected', btn.dataset.framing === framing);
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Edit Profile (single-page, all sections visible)
@@ -675,12 +730,18 @@ async function handleWizard2Next() {
       document.getElementById('genStep2').querySelector('.gen-step-time').textContent = `${totalTime}s total`;
     }
 
-    // Store first generated photo locally for try-on backward compat
+    // Store first generated photo for backward compat + reset pose selection
+    // Actual pose images are fetched from S3 by the backend using poseIndex
     if (result.generatedPhotos && result.generatedPhotos[0]) {
-      await chrome.storage.local.set({ bodyPhoto: result.generatedPhotos[0] });
+      await chrome.storage.local.set({
+        bodyPhoto: result.generatedPhotos[0],
+        selectedPoseIndex: 0
+      });
     }
 
-    // Show complete button
+    // Show success message and complete button
+    const successEl = document.getElementById('genSuccess');
+    if (successEl) successEl.hidden = false;
     document.getElementById('wizard3Done').hidden = false;
   } catch (err) {
     showError('genError', 'Generation failed: ' + err.message);
@@ -872,6 +933,27 @@ async function init() {
   document.getElementById('editFaceFileInput').addEventListener('change', (e) => {
     if (e.target.files.length > 0) handleEditFaceUpload(e.target.files[0]);
   });
+
+  // Image lightbox — click any profile photo to view full size
+  const lightbox = document.getElementById('imageLightbox');
+  document.querySelectorAll('.clickable-img').forEach((img) => {
+    img.addEventListener('click', () => {
+      if (!img.src || img.hidden) return;
+      document.getElementById('lightboxImg').src = img.src;
+      lightbox.classList.add('active');
+    });
+  });
+  document.getElementById('lightboxClose').addEventListener('click', () => {
+    lightbox.classList.remove('active');
+  });
+  lightbox.addEventListener('click', (e) => {
+    if (e.target.classList.contains('lightbox-backdrop')) {
+      lightbox.classList.remove('active');
+    }
+  });
+
+  // Pose & Framing controls
+  setupPoseAndFramingControls();
 
   // Backend URL
   const saveUrlBtn = document.getElementById('saveUrlBtn');
