@@ -72,6 +72,8 @@ router.post("/", optionalAuth, async (req, res, next) => {
     console.log(`\x1b[36m  sourceImage:\x1b[0m     ${sourceImage ? sourceImage.length : 0} chars`);
     console.log(`\x1b[36m  referenceImage:\x1b[0m  ${referenceImage ? referenceImage.length : 0} chars`);
     console.log(`\x1b[36m  garmentClass:\x1b[0m    \x1b[1m${garmentClass || "(will detect)"}\x1b[0m`);
+    console.log(`\x1b[36m  framing:\x1b[0m         \x1b[1m${framing || "full"}\x1b[0m`);
+    console.log(`\x1b[36m  poseIndex:\x1b[0m       \x1b[1m${poseIndex}\x1b[0m`);
 
     // ═══════════════════════════════════════════════════
     // STEP 1: PRODUCT ANALYSIS (Nova 2 Lite via Bedrock)
@@ -190,7 +192,9 @@ router.post("/", optionalAuth, async (req, res, next) => {
     console.log(`\x1b[36m    strategy:\x1b[0m          \x1b[1m\x1b[33m${strategy}\x1b[0m`);
     console.log(`\x1b[36m    garmentClass:\x1b[0m      ${garmentClass}`);
     console.log(`\x1b[36m    outfitType:\x1b[0m        ${outfitInfo.currentType}`);
-    console.log(`\x1b[36m    prompt:\x1b[0m            ${smartPrompt.substring(0, 150)}...`);
+    console.log(`\x1b[36m    framing:\x1b[0m           \x1b[1m${framing || "full"}\x1b[0m`);
+    console.log(`\x1b[36m    \x1b[1mFULL PROMPT:\x1b[0m`);
+    console.log(`\x1b[33m    ${smartPrompt}\x1b[0m`);
     debugSteps.push({ step: "4", name: "CONFLICT MATRIX", model: "buildSmartPrompt", time: "0s", result: { strategy, garmentClass, outfitType: outfitInfo.currentType, prompt: smartPrompt } });
 
     // ═══════════════════════════════════════════════════

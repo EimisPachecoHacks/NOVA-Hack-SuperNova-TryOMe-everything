@@ -26,9 +26,14 @@ function buildSmartPrompt(garmentClass, outfitInfo, framing) {
 
   // Half-body framing instruction (waist-up) — applicable to upper body garments and full body
   const upperBodyTypes = ["UPPER_BODY", "LONG_SLEEVE_SHIRT", "SHORT_SLEEVE_SHIRT", "NO_SLEEVE_SHIRT", "FULL_BODY", "LONG_DRESS", "SHORT_DRESS", "FULL_BODY_OUTFIT"];
-  const FRAMING_SUFFIX = (framing === "half" && upperBodyTypes.includes(garmentClass))
-    ? " Frame the output as a half-body photo from the waist up. Do not show legs or feet."
-    : "";
+  const isHalfBody = framing === "half" && upperBodyTypes.includes(garmentClass);
+  let FRAMING_SUFFIX;
+  if (isHalfBody) {
+    FRAMING_SUFFIX = " Frame the output as a half-body photo from the waist up. Do not show legs or feet.";
+  } else {
+    FRAMING_SUFFIX = " Frame the output as a full-body photo showing the person from head to toe, including feet and shoes. Do not crop at the waist or knees.";
+  }
+  console.log(`\x1b[34m  [buildSmartPrompt] framing=${framing}, garmentClass=${garmentClass}, isHalfBody=${isHalfBody}\x1b[0m`);
 
   // Concise suffix — identity is handled via image labeling + system instruction in API call
   const STUDIO_SUFFIX =
@@ -113,7 +118,8 @@ async function virtualTryOn(sourceImageBase64, referenceImageBase64, garmentClas
   const prompt = buildSmartPrompt(garmentClass, outfitInfo, framing);
   const strategy = outfitInfo?.currentType === "FULL_BODY" && (garmentClass === "UPPER_BODY" || garmentClass === "LOWER_BODY") ? "CONFLICT RESOLUTION" : "STANDARD";
   console.log(`\x1b[34m  │ strategy:\x1b[0m     \x1b[1m\x1b[33m${strategy}\x1b[0m`);
-  console.log(`\x1b[34m  │ prompt:\x1b[0m       ${prompt.substring(0, 120)}...`);
+  console.log(`\x1b[34m  │ \x1b[1mFULL PROMPT:\x1b[0m`);
+  console.log(`\x1b[33m  │ ${prompt}\x1b[0m`);
   console.log(`\x1b[34m  └─── CALLING GEMINI API... ───┘\x1b[0m`);
 
   const response = await client.models.generateContent({

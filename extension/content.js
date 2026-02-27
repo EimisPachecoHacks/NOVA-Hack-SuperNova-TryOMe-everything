@@ -429,6 +429,7 @@
         resultImage = response.resultImage;
       } else {
         // Send null as bodyImage so backend fetches the correct pose from S3 using poseIndex
+        console.log(`[NovaTryOnMe] Try-on params — poseIdx: ${currentPoseIdx}, framing: ${currentFraming}, garmentClass: ${analysisResult ? analysisResult.garmentClass : 'null'}`);
         const response = await ApiClient.tryOn(
           null,
           productImageBase64,
