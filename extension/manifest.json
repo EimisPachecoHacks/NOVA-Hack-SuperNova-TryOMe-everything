@@ -57,7 +57,10 @@
       "resources": [
         "smart-search/results.html",
         "smart-search/results.css",
-        "smart-search/results.js"
+        "smart-search/results.js",
+        "outfit-builder/wardrobe.html",
+        "outfit-builder/wardrobe.css",
+        "outfit-builder/wardrobe.js"
       ],
       "matches": ["<all_urls>"]
     }

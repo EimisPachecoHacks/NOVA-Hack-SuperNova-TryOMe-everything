@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>NovaTryOnMe - AI for Bharat Hackathon</title>
+<title>SuperNova TryOnMe - AI for Bharat Hackathon</title>
 <style>
   @page { size: landscape; margin: 0; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -139,11 +139,11 @@
     background: rgba(255,255,255,0.05);
     border: 2px solid rgba(255,153,0,0.3);
     border-radius: 20px;
-    padding: 32px;
+    padding: 28px;
     flex: 1;
   }
-  .mode-box h3 { color: #FF9900; font-size: 22px; margin-bottom: 16px; }
-  .mode-box p { font-size: 15px; line-height: 1.6; opacity: 0.85; }
+  .mode-box h3 { color: #FF9900; font-size: 20px; margin-bottom: 12px; }
+  .mode-box p { font-size: 14px; line-height: 1.6; opacity: 0.85; }
   .mode-box .mode-tag {
     display: inline-block;
     background: #FF9900;
@@ -155,13 +155,47 @@
     margin-bottom: 12px;
   }
 
-  .voice-highlight {
-    background: linear-gradient(135deg, rgba(255,153,0,0.1), rgba(186,104,200,0.1));
-    border: 1px solid rgba(255,153,0,0.2);
-    border-radius: 16px;
-    padding: 24px;
-    margin-top: 16px;
+  .dev-badge {
+    display: inline-block;
+    background: rgba(186,104,200,0.2);
+    color: #CE93D8;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-left: 8px;
+    border: 1px solid rgba(186,104,200,0.4);
   }
+
+  .screenshot-slide {
+    padding: 40px 60px;
+  }
+  .screenshot-slide h2 { margin-bottom: 16px; }
+  .screenshot-slide img {
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .tech-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 14px;
+  }
+  .tech-icon {
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .tech-icon-orange { background: rgba(255,153,0,0.15); border: 1px solid rgba(255,153,0,0.3); }
+  .tech-icon-blue { background: rgba(79,195,247,0.12); border: 1px solid rgba(79,195,247,0.3); }
+  .tech-icon-green { background: rgba(76,175,80,0.12); border: 1px solid rgba(76,175,80,0.3); }
+  .tech-icon-purple { background: rgba(186,104,200,0.12); border: 1px solid rgba(186,104,200,0.3); }
+  .tech-desc h4 { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+  .tech-desc p { font-size: 12px; opacity: 0.7; line-height: 1.3; }
 
   @media print {
     body { background: none; margin: 0; padding: 0; }
@@ -177,17 +211,18 @@
   <div class="brand-bar"></div>
   <div class="center">
     <div style="font-size:72px; margin-bottom:16px;">&#10024;</div>
-    <h1>NovaTryOnMe</h1>
+    <h1>SuperNova TryOnMe</h1>
     <p class="subtitle" style="font-size:28px; margin-top:20px;">AI-Powered Virtual Try-On for Amazon Shopping</p>
-    <div style="margin-top:40px; display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
-      <span class="tag tag-orange">Amazon Nova Lite</span>
+    <p style="font-size:18px; opacity:0.7; margin-top:12px;">A Chrome Extension that lets you see clothes on YOUR body before you buy</p>
+    <div style="margin-top:36px; display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
+      <span class="tag tag-orange">Amazon Nova 2 Lite</span>
+      <span class="tag tag-orange">Amazon Nova Canvas</span>
       <span class="tag tag-orange">Amazon Nova Act</span>
-      <span class="tag tag-orange">Grok (xAI)</span>
-      <span class="tag tag-purple">Amazon Sonic 2</span>
-      <span class="tag tag-blue">AWS Bedrock</span>
+      <span class="tag tag-orange">AWS Bedrock</span>
       <span class="tag tag-green">Gemini 2.5 Flash</span>
+      <span class="tag tag-purple">Grok xAI Video</span>
     </div>
-    <p style="margin-top:48px; font-size:16px; opacity:0.5;">AI for Bharat Hackathon 2025</p>
+    <p style="margin-top:40px; font-size:16px; opacity:0.5;">AI for Bharat Hackathon 2025</p>
   </div>
   <div class="slide-number">1</div>
 </div>
@@ -218,227 +253,436 @@
   <div class="slide-number">2</div>
 </div>
 
-<!-- SLIDE 3: Solution Overview -->
+<!-- SLIDE 3: Why AI is Essential -->
 <div class="slide slide-dark">
   <div class="brand-bar"></div>
-  <h2>Our Solution: <span class="highlight">NovaTryOnMe</span></h2>
-  <p style="font-size:20px; opacity:0.8; margin-bottom:32px;">A Chrome extension that brings virtual try-on directly into the Amazon shopping experience</p>
-  <div class="three-col">
-    <div class="feature-card">
-      <div class="icon">&#128087;</div>
-      <h3>Clothing Try-On</h3>
-      <p>See any garment on YOUR body. Upload your photo once, try on unlimited products. Supports tops, bottoms, dresses, footwear.</p>
+  <h2>Why <span class="highlight">AI is Essential</span> for This Solution</h2>
+  <p style="font-size:16px; opacity:0.7; margin-bottom:24px;">This problem is fundamentally impossible to solve without AI. Every core feature requires intelligent visual understanding that only AI can provide.</p>
+  <div class="two-col" style="gap:40px;">
+    <div>
+      <div class="feature-card" style="margin-bottom:16px; border-left:3px solid #FF9900;">
+        <h3 style="font-size:16px; color:#FF9900;">Virtual Try-On Requires Visual Intelligence</h3>
+        <p>Placing a garment on a person's body while preserving their exact face, skin tone, body shape, and pose requires deep understanding of human anatomy, fabric physics, and lighting. No rule-based system or simple image overlay can achieve this &mdash; only generative AI models like Gemini can produce photorealistic results that look natural.</p>
+      </div>
+      <div class="feature-card" style="margin-bottom:16px; border-left:3px solid #4FC3F7;">
+        <h3 style="font-size:16px; color:#4FC3F7;">Outfit Conflict Resolution Needs Reasoning</h3>
+        <p>When a user wearing a dress tries on pants, AI must reason: "remove the dress, add the pants, and generate a matching top." This requires understanding of clothing categories, fashion coordination, and compositional reasoning that only AI can perform.</p>
+      </div>
+      <div class="feature-card" style="border-left:3px solid #66BB6A;">
+        <h3 style="font-size:16px; color:#66BB6A;">Product Classification at Scale</h3>
+        <p>Amazon has millions of products. AI classifies each into garment categories (upper body, full body, footwear, cosmetics) in real-time, determining the correct try-on strategy automatically. Manual categorization is impossible at this scale.</p>
+      </div>
     </div>
-    <div class="feature-card">
-      <div class="icon">&#128132;</div>
-      <h3>Cosmetics Try-On</h3>
-      <p>Virtual makeup application. Try lipstick, eyeshadow, blush, foundation, eyeliner, and mascara in any color.</p>
-    </div>
-    <div class="feature-card">
-      <div class="icon">&#127908;</div>
-      <h3>Voice Shopping</h3>
-      <p>Natural voice commands powered by Amazon Sonic 2. "Find me a red dress" or "Try this on" - hands-free shopping.</p>
-    </div>
-    <div class="feature-card">
-      <div class="icon">&#128269;</div>
-      <h3>AI Smart Search</h3>
-      <p>Natural language product discovery powered by Amazon Nova Act. An AI agent browses Amazon for you.</p>
-    </div>
-    <div class="feature-card">
-      <div class="icon">&#127909;</div>
-      <h3>Video Animation</h3>
-      <p>See your try-on come alive. Generate a short video of you wearing the product with natural movement.</p>
-    </div>
-    <div class="feature-card">
-      <div class="icon">&#10084;</div>
-      <h3>Favorites & Profiles</h3>
-      <p>Save your best looks. Full user authentication, profile management, and try-on history with AWS cloud storage.</p>
+    <div>
+      <div class="feature-card" style="margin-bottom:16px; border-left:3px solid #CE93D8;">
+        <h3 style="font-size:16px; color:#CE93D8;">AI Agent for Natural Language Shopping</h3>
+        <p>Nova Act doesn't just search keywords &mdash; it <strong>browses Amazon like a human</strong>, navigating pages, applying filters, scrolling results, and extracting product data. This agentic behavior requires AI that understands web interfaces and user intent.</p>
+      </div>
+      <div class="feature-card" style="margin-bottom:16px; border-left:3px solid #FF9900;">
+        <h3 style="font-size:16px; color:#FF9900;">Identity-Preserving Profile Generation</h3>
+        <p>Generating 3 professional model poses from 5 casual user photos &mdash; while preserving exact facial features, body proportions, and skin tone &mdash; requires multi-reference AI that learns a person's identity from limited examples.</p>
+      </div>
+      <div class="feature-card" style="border-left:3px solid #4FC3F7;">
+        <h3 style="font-size:16px; color:#4FC3F7;">Video Animation from a Single Image</h3>
+        <p>Transforming a static try-on photo into a 6-second video with natural movement (weight shifts, fabric flow, subtle poses) requires AI that understands physics, human motion, and fashion presentation. No traditional animation tool can do this.</p>
+      </div>
     </div>
   </div>
   <div class="slide-number">3</div>
 </div>
 
-<!-- SLIDE 4: Two Try-On Modes -->
-<div class="slide slide-dark">
+<!-- SLIDE 4: Why Chrome Extension + Business Impact -->
+<div class="slide slide-aws">
   <div class="brand-bar"></div>
-  <h2>Two Ways to <span class="highlight">Try On</span></h2>
-  <div style="display:flex; gap:32px; flex:1; align-items:stretch;">
-    <div class="mode-box">
-      <div class="mode-tag">MODE 1</div>
-      <h3>&#127919; Focused Product Page</h3>
-      <p>Browse any Amazon product page normally. A <strong>"Try It On"</strong> button appears on the product image. Click it and instantly see the garment on your body.</p>
-      <ul class="feature-list" style="margin-top:16px;">
-        <li>Auto-detects product type (clothing, cosmetics, footwear)</li>
-        <li>Smart outfit conflict resolution (dress + top = auto-generate matching bottom)</li>
-        <li>Auto-refreshes when you switch colors or variations</li>
-        <li>Save results to favorites & animate to video</li>
-      </ul>
-      <div style="margin-top:12px;">
-        <span class="tag tag-green">Gemini 2.5 Flash</span>
-        <span class="tag tag-orange">Nova Lite</span>
+  <h2>Why a <span class="highlight">Chrome Extension</span>?</h2>
+  <p style="font-size:16px; opacity:0.8; margin-bottom:20px;">We can't modify Amazon's website directly &mdash; we don't work for Amazon. A Chrome extension is the only way to enhance the shopping experience without platform access.</p>
+  <div class="two-col" style="gap:36px;">
+    <div>
+      <div class="feature-card" style="margin-bottom:14px;">
+        <h3 style="font-size:16px; color:#FF9900;">The Technical Reality</h3>
+        <p>Amazon.com is a closed platform. We cannot inject features into their product pages from a standalone website. A Chrome extension uses <strong>content scripts</strong> to seamlessly overlay our AI-powered UI directly onto Amazon's existing product pages &mdash; the "Try It On" button appears right where the user is already shopping.</p>
+      </div>
+      <div class="feature-card" style="margin-bottom:14px;">
+        <h3 style="font-size:16px; color:#4FC3F7;">Zero Friction Adoption</h3>
+        <p>Users don't leave Amazon. They don't open a second app or website. The try-on experience is <strong>embedded into their existing shopping workflow</strong>. Install once, and every Amazon product page becomes a virtual fitting room automatically.</p>
+      </div>
+      <div class="feature-card">
+        <h3 style="font-size:16px; color:#66BB6A;">Proof of Concept for Amazon Integration</h3>
+        <p>This extension demonstrates the full feature set that <strong>Amazon could natively integrate</strong> into their platform. Every API endpoint, every AI pipeline, every UI component is production-ready and designed for scale.</p>
       </div>
     </div>
-    <div class="mode-box">
-      <div class="mode-tag">MODE 2</div>
-      <h3>&#128270; AI Smart Search</h3>
-      <p>Describe what you want in natural language: <em>"Find me black dresses for women"</em>. An AI agent browses Amazon, applies filters, and returns a curated gallery of 20+ products.</p>
-      <ul class="feature-list" style="margin-top:16px;">
-        <li>Natural language queries (no keywords needed)</li>
-        <li>AI agent applies "4+ Stars" quality filter automatically</li>
-        <li>Results displayed in a clean product grid</li>
-        <li>"Try On" button on every product card</li>
-      </ul>
-      <div style="margin-top:12px;">
-        <span class="tag tag-orange">Amazon Nova Act</span>
-        <span class="tag tag-orange">Nova Lite</span>
-        <span class="tag tag-green">Gemini 2.5 Flash</span>
+    <div>
+      <h3 style="color:#FF9900; font-size:20px; margin-bottom:16px;">How Amazon Benefits</h3>
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div style="display:flex; gap:12px; align-items:start;">
+          <div class="big-number" style="font-size:36px; line-height:1;">&#8593;</div>
+          <div>
+            <h3 style="font-size:15px; margin-bottom:2px;">Higher Conversion Rates</h3>
+            <p style="font-size:13px; opacity:0.75;">When shoppers see clothes on their own body, hesitation disappears. Confident buyers add to cart more often and abandon less.</p>
+          </div>
+        </div>
+        <div style="display:flex; gap:12px; align-items:start;">
+          <div class="big-number" style="font-size:36px; line-height:1;">&#8595;</div>
+          <div>
+            <h3 style="font-size:15px; margin-bottom:2px;">Dramatically Lower Returns</h3>
+            <p style="font-size:13px; opacity:0.75;">Returns cost Amazon billions annually in logistics and lost revenue. "Didn't look as expected" returns drop when shoppers preview the look first.</p>
+          </div>
+        </div>
+        <div style="display:flex; gap:12px; align-items:start;">
+          <div class="big-number" style="font-size:36px; line-height:1;">&#128176;</div>
+          <div>
+            <h3 style="font-size:15px; margin-bottom:2px;">Increased Basket Size</h3>
+            <p style="font-size:13px; opacity:0.75;">Outfit Builder encourages multi-item purchases. Users try a top, then matching pants, then shoes &mdash; buying complete outfits instead of single items.</p>
+          </div>
+        </div>
+        <div style="display:flex; gap:12px; align-items:start;">
+          <div class="big-number" style="font-size:36px; line-height:1;">&#128151;</div>
+          <div>
+            <h3 style="font-size:15px; margin-bottom:2px;">Customer Loyalty & Engagement</h3>
+            <p style="font-size:13px; opacity:0.75;">Shoppers who build a profile and save favorites are deeply invested. They return to Amazon specifically because of the try-on experience.</p>
+          </div>
+        </div>
       </div>
     </div>
   </div>
   <div class="slide-number">4</div>
 </div>
 
-<!-- SLIDE 5: Voice Agent -->
+<!-- SLIDE 5: Everyone Wins - Emotional & Business Impact -->
 <div class="slide slide-gradient">
   <div class="brand-bar"></div>
-  <h2>&#127908; Voice Shopping with <span class="highlight">Amazon Sonic 2</span></h2>
-  <p style="font-size:18px; opacity:0.8; margin-bottom:28px;">Hands-free shopping experience powered by Amazon's next-generation speech AI</p>
-  <div class="two-col" style="align-items:center;">
-    <div>
-      <div class="voice-highlight">
-        <h3 style="color:#FF9900; margin-bottom:12px;">Natural Voice Commands</h3>
-        <div style="font-size:16px; line-height:2;">
-          <div>&#127908; <em>"Find me a red summer dress"</em></div>
-          <div>&#127908; <em>"Try this on me"</em></div>
-          <div>&#127908; <em>"Show me something more casual"</em></div>
-          <div>&#127908; <em>"Save this to my favorites"</em></div>
-          <div>&#127908; <em>"What size would fit me best?"</em></div>
-        </div>
-      </div>
+  <h2>Everyone <span class="highlight">Wins</span></h2>
+  <p style="font-size:17px; opacity:0.8; margin-bottom:24px;">SuperNova TryOnMe creates value for shoppers, Amazon, and fashion brands simultaneously</p>
+  <div class="three-col" style="gap:28px;">
+    <div class="feature-card" style="border-top:3px solid #FF9900;">
+      <h3 style="color:#FF9900; font-size:20px;">For Shoppers</h3>
+      <ul class="feature-list" style="margin-top:8px;">
+        <li style="font-size:14px; padding:6px 0 6px 28px;"><strong>Emotional confidence:</strong> "I KNOW this looks good on me" replaces "I hope this fits"</li>
+        <li style="font-size:14px; padding:6px 0 6px 28px;"><strong>Fun & engaging:</strong> Trying on clothes becomes a game &mdash; switch poses, build outfits, animate your looks</li>
+        <li style="font-size:14px; padding:6px 0 6px 28px;"><strong>Personal stylist:</strong> AI suggests matching pieces and provides style tips</li>
+        <li style="font-size:14px; padding:6px 0 6px 28px;"><strong>Save time & money:</strong> No more ordering 3 sizes to return 2</li>
+        <li style="font-size:14px; padding:6px 0 6px 28px;"><strong>Share moments:</strong> Animated try-on videos to share with friends and family before buying</li>
+      </ul>
     </div>
-    <div>
-      <div class="feature-card" style="margin-bottom:16px;">
-        <h3 style="color:#FF9900;">Real-Time Conversation</h3>
-        <p>Amazon Sonic 2 enables natural, real-time voice interaction. Ask questions, get styling advice, and navigate products using just your voice.</p>
-      </div>
-      <div class="feature-card" style="margin-bottom:16px;">
-        <h3 style="color:#4FC3F7;">Context-Aware</h3>
-        <p>The voice agent understands shopping context. It knows what product you're viewing, your preferences, and your try-on history to provide personalized assistance.</p>
-      </div>
-      <div class="feature-card">
-        <h3 style="color:#66BB6A;">Accessibility First</h3>
-        <p>Makes the entire shopping experience accessible to users who prefer voice interaction or have limited mobility.</p>
-      </div>
+    <div class="feature-card" style="border-top:3px solid #4FC3F7;">
+      <h3 style="color:#4FC3F7; font-size:20px;">For Amazon</h3>
+      <ul class="feature-list" style="margin-top:8px;">
+        <li style="font-size:14px; padding:6px 0 6px 28px;"><strong>Reduce $40B+</strong> in annual fashion return costs</li>
+        <li style="font-size:14px; padding:6px 0 6px 28px;"><strong>Higher conversions:</strong> Shoppers who try on buy 3x more</li>
+        <li style="font-size:14px; padding:6px 0 6px 28px;"><strong>Larger baskets:</strong> Outfit Builder drives multi-item purchases</li>
+        <li style="font-size:14px; padding:6px 0 6px 28px;"><strong>Longer sessions:</strong> Users spend more time exploring products</li>
+        <li style="font-size:14px; padding:6px 0 6px 28px;"><strong>Competitive edge:</strong> Feature no other e-commerce platform offers at this level</li>
+      </ul>
+    </div>
+    <div class="feature-card" style="border-top:3px solid #66BB6A;">
+      <h3 style="color:#66BB6A; font-size:20px;">For Fashion Brands</h3>
+      <ul class="feature-list" style="margin-top:8px;">
+        <li style="font-size:14px; padding:6px 0 6px 28px;"><strong>Better product visibility:</strong> Shoppers try on more items than they ever would physically</li>
+        <li style="font-size:14px; padding:6px 0 6px 28px;"><strong>Fewer negative reviews</strong> from sizing/appearance disappointment</li>
+        <li style="font-size:14px; padding:6px 0 6px 28px;"><strong>Cross-sell opportunities:</strong> Outfit Builder pairs their products with complementary items</li>
+        <li style="font-size:14px; padding:6px 0 6px 28px;"><strong>Real engagement data:</strong> Which products get tried on most, in which combinations</li>
+        <li style="font-size:14px; padding:6px 0 6px 28px;"><strong>New discovery channel:</strong> Smart Search surfaces products beyond traditional keyword search</li>
+      </ul>
     </div>
   </div>
   <div class="slide-number">5</div>
 </div>
 
-<!-- SLIDE 6: Architecture -->
+<!-- SLIDE 6: Solution Overview -->
 <div class="slide slide-dark">
   <div class="brand-bar"></div>
-  <h2>Architecture & <span class="highlight">AWS Services</span></h2>
-  <div style="margin-bottom:24px;">
-    <div class="flow">
-      <div class="flow-step">Chrome Extension<br><small style="opacity:0.6;">Content Script + Popup</small></div>
-      <div class="flow-arrow">&#8594;</div>
-      <div class="flow-step">Background Worker<br><small style="opacity:0.6;">Message Router</small></div>
-      <div class="flow-arrow">&#8594;</div>
-      <div class="flow-step">Node.js Backend<br><small style="opacity:0.6;">Express API</small></div>
-      <div class="flow-arrow">&#8594;</div>
-      <div class="flow-step" style="border-color:rgba(255,153,0,0.6);">AWS Services<br><small style="opacity:0.6;">Bedrock + S3 + DynamoDB</small></div>
+  <h2>Our Solution: <span class="highlight">SuperNova TryOnMe</span></h2>
+  <p style="font-size:18px; opacity:0.8; margin-bottom:28px;">A Chrome extension that brings AI-powered virtual try-on directly into your Amazon shopping experience</p>
+  <div class="three-col">
+    <div class="feature-card">
+      <div class="icon">&#128087;</div>
+      <h3>Clothing Try-On</h3>
+      <p>See any garment on YOUR body. Upload your photos once, try on unlimited products. Supports tops, bottoms, dresses, and footwear with smart outfit conflict resolution.</p>
     </div>
-  </div>
-  <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px;">
-    <div class="aws-card">
-      <div class="icon">&#128064;</div>
-      <h3>Nova Lite</h3>
-      <p>Product classification & outfit analysis</p>
+    <div class="feature-card">
+      <div class="icon">&#128132;</div>
+      <h3>Cosmetics Try-On</h3>
+      <p>Virtual makeup application using AI inpainting. Try lipstick, eyeshadow, blush, foundation, eyeliner, and mascara in any color on your own face.</p>
     </div>
-    <div class="aws-card">
-      <div class="icon">&#129302;</div>
-      <h3>Nova Act</h3>
-      <p>AI agent for smart search & browsing</p>
+    <div class="feature-card">
+      <div class="icon">&#128269;</div>
+      <h3>AI Smart Search</h3>
+      <p>Natural language product discovery powered by Amazon Nova Act. An AI agent browses Amazon for you, applies quality filters, and returns curated results.</p>
     </div>
-    <div class="aws-card">
+    <div class="feature-card">
+      <div class="icon">&#128090;</div>
+      <h3>Outfit Builder</h3>
+      <p>Build complete outfits with AI. Describe top, bottom & shoes separately. AI finds matching products on Amazon and lets you try the full outfit together.</p>
+    </div>
+    <div class="feature-card">
       <div class="icon">&#127909;</div>
-      <h3>Grok (xAI)</h3>
-      <p>Video generation from try-on results</p>
+      <h3>Video Animation</h3>
+      <p>See your try-on come alive. Generate a short video of you wearing the product with natural model-like movement, powered by Grok xAI video generation.</p>
     </div>
-    <div class="aws-card">
-      <div class="icon">&#127908;</div>
-      <h3>Sonic 2</h3>
-      <p>Voice agent for hands-free shopping</p>
-    </div>
-    <div class="aws-card">
-      <div class="icon">&#128272;</div>
-      <h3>Cognito</h3>
-      <p>User auth, signup, verification</p>
-    </div>
-    <div class="aws-card">
-      <div class="icon">&#128451;</div>
-      <h3>DynamoDB</h3>
-      <p>User profiles & favorites storage</p>
-    </div>
-    <div class="aws-card">
-      <div class="icon">&#128230;</div>
-      <h3>S3</h3>
-      <p>Photo storage & try-on results</p>
-    </div>
-    <div class="aws-card">
-      <div class="icon">&#9889;</div>
-      <h3>Bedrock</h3>
-      <p>Unified API for all Nova models</p>
-    </div>
-    <div class="aws-card">
-      <div class="icon">&#128142;</div>
-      <h3>Gemini 2.5</h3>
-      <p>Advanced try-on with conflict resolution</p>
+    <div class="feature-card">
+      <div class="icon">&#10084;</div>
+      <h3>Favorites & Profiles</h3>
+      <p>Save your best looks. Full user authentication with AWS Cognito, AI-generated profile poses, cloud storage of photos and try-on history.</p>
     </div>
   </div>
   <div class="slide-number">6</div>
 </div>
 
-<!-- SLIDE 7: Smart Try-On Pipeline -->
+<!-- SLIDE 7: How It Works - User Guide -->
+<div class="slide slide-dark">
+  <div class="brand-bar"></div>
+  <h2>How It <span class="highlight">Works</span></h2>
+  <p style="font-size:16px; opacity:0.7; margin-bottom:20px;">Getting started takes just 2 minutes. Here's the user journey:</p>
+  <div style="display:flex; flex-direction:column; gap:16px; flex:1; justify-content:center;">
+    <div class="flow">
+      <div class="flow-step" style="background:rgba(255,153,0,0.2); min-width:200px;">
+        <div style="font-size:28px;">&#128100;</div>
+        <strong>1. Create Account</strong><br>
+        <small style="opacity:0.6;">Sign up with email<br>Verified via AWS Cognito</small>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-step" style="background:rgba(255,153,0,0.2); min-width:200px;">
+        <div style="font-size:28px;">&#128247;</div>
+        <strong>2. Upload 5 Photos</strong><br>
+        <small style="opacity:0.6;">3 full-body + 2 face close-ups<br>AI learns your appearance</small>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-step" style="background:rgba(255,153,0,0.2); min-width:200px;">
+        <div style="font-size:28px;">&#10024;</div>
+        <strong>3. AI Generates Poses</strong><br>
+        <small style="opacity:0.6;">Gemini creates 3 professional<br>model poses of YOU</small>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-step" style="background:rgba(255,153,0,0.2); min-width:200px;">
+        <div style="font-size:28px;">&#128722;</div>
+        <strong>4. Shop on Amazon</strong><br>
+        <small style="opacity:0.6;">Browse any product page<br>"Try It On" button appears</small>
+      </div>
+    </div>
+    <div style="text-align:center; margin:8px 0;">
+      <span style="font-size:14px; opacity:0.5;">Once set up, the extension works automatically on every Amazon product page</span>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:16px;">
+      <div class="feature-card" style="padding:16px; text-align:center;">
+        <div style="font-size:24px; margin-bottom:6px;">&#127912;</div>
+        <h3 style="font-size:14px; color:#FF9900;">Pose Selection</h3>
+        <p style="font-size:12px;">Choose from 3 AI poses (A, B, C) to see clothing from different angles</p>
+      </div>
+      <div class="feature-card" style="padding:16px; text-align:center;">
+        <div style="font-size:24px; margin-bottom:6px;">&#128064;</div>
+        <h3 style="font-size:14px; color:#FF9900;">Framing Options</h3>
+        <p style="font-size:12px;">Switch between Full Body and Half Body framing for the try-on result</p>
+      </div>
+      <div class="feature-card" style="padding:16px; text-align:center;">
+        <div style="font-size:24px; margin-bottom:6px;">&#127752;</div>
+        <h3 style="font-size:14px; color:#FF9900;">Auto Color Switch</h3>
+        <p style="font-size:12px;">Click a different color swatch on Amazon and try-on auto-refreshes</p>
+      </div>
+      <div class="feature-card" style="padding:16px; text-align:center;">
+        <div style="font-size:24px; margin-bottom:6px;">&#128161;</div>
+        <h3 style="font-size:14px; color:#FF9900;">Style Tips</h3>
+        <p style="font-size:12px;">AI provides personalized styling tips for each garment you try on</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-number">7</div>
+</div>
+
+<!-- SLIDE 8: Three Modes -->
+<div class="slide slide-dark">
+  <div class="brand-bar"></div>
+  <h2>Three Ways to <span class="highlight">Shop & Try On</span></h2>
+  <div style="display:flex; gap:24px; flex:1; align-items:stretch;">
+    <div class="mode-box">
+      <div class="mode-tag">MODE 1</div>
+      <h3>&#127919; Product Page Try-On</h3>
+      <p>Browse any Amazon product page. A <strong>"Try It On"</strong> button appears on the product image. Click it and see the garment on your body in seconds.</p>
+      <ul class="feature-list" style="margin-top:12px;">
+        <li style="font-size:14px;">Auto-detects product type</li>
+        <li style="font-size:14px;">Smart outfit conflict resolution</li>
+        <li style="font-size:14px;">Auto-refresh on color changes</li>
+        <li style="font-size:14px;">Save to favorites & animate</li>
+      </ul>
+      <div style="margin-top:8px;">
+        <span class="tag tag-green" style="font-size:11px;">Gemini 2.5 Flash</span>
+        <span class="tag tag-orange" style="font-size:11px;">Nova 2 Lite</span>
+      </div>
+    </div>
+    <div class="mode-box">
+      <div class="mode-tag">MODE 2</div>
+      <h3>&#128270; AI Smart Search</h3>
+      <p>Type what you want: <em>"black dresses for women"</em>. An AI agent browses Amazon, applies 4+ star filters, and returns 20+ curated products with "Try On" on each.</p>
+      <ul class="feature-list" style="margin-top:12px;">
+        <li style="font-size:14px;">Natural language queries</li>
+        <li style="font-size:14px;">AI agent applies quality filters</li>
+        <li style="font-size:14px;">Product grid with try-on buttons</li>
+        <li style="font-size:14px;">Buy directly on Amazon</li>
+      </ul>
+      <div style="margin-top:8px;">
+        <span class="tag tag-orange" style="font-size:11px;">Amazon Nova Act</span>
+        <span class="tag tag-green" style="font-size:11px;">Gemini 2.5 Flash</span>
+      </div>
+    </div>
+    <div class="mode-box">
+      <div class="mode-tag">MODE 3</div>
+      <h3>&#128090; Outfit Builder</h3>
+      <p>Build a complete outfit. Describe a <strong>top, bottom & shoes</strong> separately. AI searches Amazon for each, presents a virtual wardrobe, and lets you try the full outfit together.</p>
+      <ul class="feature-list" style="margin-top:12px;">
+        <li style="font-size:14px;">3 parallel product searches</li>
+        <li style="font-size:14px;">Visual wardrobe with hangers</li>
+        <li style="font-size:14px;">Mix & match any combination</li>
+        <li style="font-size:14px;">Try entire outfit in one shot</li>
+      </ul>
+      <div style="margin-top:8px;">
+        <span class="tag tag-orange" style="font-size:11px;">Nova Act</span>
+        <span class="tag tag-green" style="font-size:11px;">Gemini 2.5 Flash</span>
+      </div>
+    </div>
+  </div>
+  <div class="slide-number">8</div>
+</div>
+
+<!-- SLIDE 9: Architecture Diagram (Generated Image) -->
+<div class="slide slide-white" style="padding:30px 40px;">
+  <div class="brand-bar"></div>
+  <h2 style="color:#232f3e; margin-bottom:12px;">System <span style="color:#FF9900;">Architecture</span></h2>
+  <div style="flex:1; display:flex; align-items:center; justify-content:center;">
+    <img src="app-images/architecture-diagram.png" style="max-width:1180px; max-height:580px; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,0.15);" />
+  </div>
+  <div class="slide-number" style="color:#999;">9</div>
+</div>
+
+<!-- SLIDE 10: Technology Deep Dive -->
+<div class="slide slide-dark">
+  <div class="brand-bar"></div>
+  <h2>Technology <span class="highlight">Deep Dive</span></h2>
+  <p style="font-size:15px; opacity:0.7; margin-bottom:20px;">Why we chose each technology and what it powers</p>
+  <div class="two-col" style="gap:40px;">
+    <div>
+      <h3 style="color:#FF9900; font-size:18px; margin-bottom:16px;">AI Models</h3>
+      <div class="tech-row">
+        <div class="tech-icon tech-icon-orange">&#128064;</div>
+        <div class="tech-desc">
+          <h4 style="color:#FF9900;">Amazon Nova 2 Lite <span class="tag tag-orange" style="font-size:10px; padding:2px 8px;">Bedrock</span></h4>
+          <p>Fast, low-cost classification. Detects garment type (upper/lower/full/footwear), identifies person vs product images, classifies current outfit for conflict resolution. Chosen for speed - runs 3 classification calls in the pipeline.</p>
+        </div>
+      </div>
+      <div class="tech-row">
+        <div class="tech-icon tech-icon-orange">&#127912;</div>
+        <div class="tech-desc">
+          <h4 style="color:#FF9900;">Amazon Nova Canvas <span class="tag tag-orange" style="font-size:10px; padding:2px 8px;">Bedrock</span></h4>
+          <p>Specialized inpainting model. Powers cosmetics try-on (lipstick, eyeshadow, blush on user's face) and background removal. Chosen for its precise region-based editing capabilities.</p>
+        </div>
+      </div>
+      <div class="tech-row">
+        <div class="tech-icon tech-icon-green">&#10024;</div>
+        <div class="tech-desc">
+          <h4 style="color:#66BB6A;">Google Gemini 2.5 Flash Image</h4>
+          <p>Core try-on engine. Multi-image input (user photo + garment) with intelligent prompt engineering. Also generates 3 professional AI profile poses from 5 user photos. Chosen for best-in-class image editing with identity preservation.</p>
+        </div>
+      </div>
+      <div class="tech-row">
+        <div class="tech-icon tech-icon-purple">&#127909;</div>
+        <div class="tech-desc">
+          <h4 style="color:#CE93D8;">Grok Imagine Video (xAI) <span class="tag tag-purple" style="font-size:10px; padding:2px 8px;">fal.ai</span></h4>
+          <p>Image-to-video generation. Animates try-on results with natural runway-style movement. 6-second 720p portrait videos. Chosen for high-quality fashion animation output.</p>
+        </div>
+      </div>
+      <div class="tech-row">
+        <div class="tech-icon tech-icon-orange">&#129302;</div>
+        <div class="tech-desc">
+          <h4 style="color:#FF9900;">Amazon Nova Act</h4>
+          <p>AI browser agent. Navigates Amazon search, applies filters (4+ stars), extracts product data (ASIN, image, price). Powers Smart Search and Outfit Builder product discovery.</p>
+        </div>
+      </div>
+    </div>
+    <div>
+      <h3 style="color:#4FC3F7; font-size:18px; margin-bottom:16px;">AWS Infrastructure</h3>
+      <div class="tech-row">
+        <div class="tech-icon tech-icon-blue">&#128272;</div>
+        <div class="tech-desc">
+          <h4 style="color:#4FC3F7;">Amazon Cognito</h4>
+          <p>Full user authentication: signup, email verification, login, JWT token management with automatic refresh. Chosen for seamless integration with AWS ecosystem and secure token-based auth.</p>
+        </div>
+      </div>
+      <div class="tech-row">
+        <div class="tech-icon tech-icon-blue">&#128230;</div>
+        <div class="tech-desc">
+          <h4 style="color:#4FC3F7;">Amazon S3</h4>
+          <p>Stores user photos (body + face), AI-generated profile poses, try-on result images, and favorite looks. Presigned URLs for secure delivery. Two buckets: users and videos.</p>
+        </div>
+      </div>
+      <div class="tech-row">
+        <div class="tech-icon tech-icon-blue">&#128451;</div>
+        <div class="tech-desc">
+          <h4 style="color:#4FC3F7;">Amazon DynamoDB</h4>
+          <p>Two tables: UserProfiles (personal info, photo S3 keys, generated poses) and Favorites (saved try-on results indexed by ASIN). Chosen for serverless scale and low latency.</p>
+        </div>
+      </div>
+      <div class="tech-row">
+        <div class="tech-icon tech-icon-blue">&#9889;</div>
+        <div class="tech-desc">
+          <h4 style="color:#4FC3F7;">AWS Bedrock</h4>
+          <p>Unified API for all Amazon Nova models (Lite, Canvas). Provides InvokeModel for sync calls and StartAsyncInvoke for video generation. Single SDK, multiple AI capabilities.</p>
+        </div>
+      </div>
+      <h3 style="color:#66BB6A; font-size:18px; margin-top:16px; margin-bottom:12px;">Application Stack</h3>
+      <div class="tech-row">
+        <div class="tech-icon tech-icon-green">&#128187;</div>
+        <div class="tech-desc">
+          <h4 style="color:#66BB6A;">Chrome Extension (MV3) + Node.js Backend</h4>
+          <p>Content scripts inject UI on Amazon pages. Background worker handles auth & routing. Express backend orchestrates the 5-step AI pipeline. Sharp for image processing.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-number">10</div>
+</div>
+
+<!-- SLIDE 11: Smart Try-On Pipeline -->
 <div class="slide slide-dark">
   <div class="brand-bar"></div>
   <h2>Smart <span class="highlight">Try-On Pipeline</span></h2>
-  <p style="font-size:16px; opacity:0.7; margin-bottom:20px;">Intelligent outfit conflict resolution ensures natural, realistic results every time</p>
+  <p style="font-size:16px; opacity:0.7; margin-bottom:20px;">5-step AI orchestration with intelligent outfit conflict resolution</p>
   <div class="two-col">
     <div>
       <h3 style="color:#FF9900; margin-bottom:16px;">Pipeline Steps</h3>
-      <div style="display:flex; flex-direction:column; gap:12px;">
+      <div style="display:flex; flex-direction:column; gap:10px;">
         <div class="flow-step" style="text-align:left;">
-          <strong>1. Product Analysis</strong> <span class="tag tag-orange" style="font-size:11px;">Nova Lite</span><br>
-          <small style="opacity:0.7;">Classifies garment type: upper body, lower body, full body, footwear, cosmetics</small>
+          <strong>1. Product Analysis</strong> <span class="tag tag-orange" style="font-size:11px;">Nova 2 Lite</span><br>
+          <small style="opacity:0.7;">Classifies garment type, color, category. Detects if image has a model wearing the garment.</small>
         </div>
         <div class="flow-step" style="text-align:left;">
-          <strong>2. Outfit Classification</strong> <span class="tag tag-orange" style="font-size:11px;">Nova Lite</span><br>
-          <small style="opacity:0.7;">Analyzes what the user is currently wearing to detect conflicts</small>
+          <strong>2. Person Detection & Garment Extraction</strong> <span class="tag tag-green" style="font-size:11px;">Gemini</span><br>
+          <small style="opacity:0.7;">If product image has a person, extracts the garment into a clean product shot.</small>
         </div>
         <div class="flow-step" style="text-align:left;">
-          <strong>3. Smart Prompt Generation</strong><br>
-          <small style="opacity:0.7;">Builds context-aware instructions based on garment + outfit combination</small>
+          <strong>3. Outfit Classification</strong> <span class="tag tag-orange" style="font-size:11px;">Nova 2 Lite</span><br>
+          <small style="opacity:0.7;">Analyzes what the user is currently wearing to detect outfit conflicts.</small>
         </div>
         <div class="flow-step" style="text-align:left;">
-          <strong>4. Virtual Try-On</strong> <span class="tag tag-green" style="font-size:11px;">Gemini 2.5 Flash</span><br>
-          <small style="opacity:0.7;">Generates photorealistic result preserving user's identity</small>
+          <strong>4. Smart Prompt Generation</strong><br>
+          <small style="opacity:0.7;">Builds context-aware instructions based on garment + outfit combination with conflict resolution logic.</small>
+        </div>
+        <div class="flow-step" style="text-align:left;">
+          <strong>5. Virtual Try-On</strong> <span class="tag tag-green" style="font-size:11px;">Gemini 2.5 Flash</span><br>
+          <small style="opacity:0.7;">Generates photorealistic result preserving user's face, body, skin tone, and hairstyle exactly.</small>
         </div>
       </div>
     </div>
     <div>
       <h3 style="color:#4FC3F7; margin-bottom:16px;">Conflict Resolution Examples</h3>
-      <div class="feature-card" style="margin-bottom:12px;">
+      <div class="feature-card" style="margin-bottom:10px;">
         <h3 style="font-size:15px;">User wearing dress + trying on a top</h3>
         <p>AI removes dress, applies the top, and <strong>generates matching pants/skirt</strong> that complement the new top</p>
       </div>
-      <div class="feature-card" style="margin-bottom:12px;">
+      <div class="feature-card" style="margin-bottom:10px;">
         <h3 style="font-size:15px;">User wearing dress + trying on pants</h3>
         <p>AI removes dress, applies the pants, and <strong>generates a matching top</strong> that complements the bottoms</p>
       </div>
-      <div class="feature-card" style="margin-bottom:12px;">
+      <div class="feature-card" style="margin-bottom:10px;">
         <h3 style="font-size:15px;">Color variation switch</h3>
-        <p>Auto-detects swatch changes and <strong>re-runs try-on instantly</strong> with the new color</p>
+        <p>Auto-detects swatch changes on Amazon and <strong>re-runs try-on instantly</strong> with the new color</p>
       </div>
       <div class="feature-card">
         <h3 style="font-size:15px;">Identity preservation</h3>
@@ -446,10 +690,46 @@
       </div>
     </div>
   </div>
-  <div class="slide-number">7</div>
+  <div class="slide-number">11</div>
 </div>
 
-<!-- SLIDE 8: Benefits -->
+<!-- SLIDE 12: Voice Shopping (In Development) -->
+<div class="slide slide-gradient">
+  <div class="brand-bar"></div>
+  <h2>&#127908; Voice Shopping <span class="dev-badge" style="font-size:14px; padding:4px 14px;">IN DEVELOPMENT</span></h2>
+  <p style="font-size:18px; opacity:0.8; margin-bottom:28px;">Next milestone: hands-free shopping powered by Amazon Sonic 2</p>
+  <div class="two-col" style="align-items:center;">
+    <div>
+      <div style="background: linear-gradient(135deg, rgba(255,153,0,0.1), rgba(186,104,200,0.1)); border: 1px solid rgba(255,153,0,0.2); border-radius: 16px; padding: 24px;">
+        <h3 style="color:#FF9900; margin-bottom:12px;">Planned Voice Commands</h3>
+        <div style="font-size:16px; line-height:2;">
+          <div>&#127908; <em>"Find me a red summer dress"</em></div>
+          <div>&#127908; <em>"Try this on me"</em></div>
+          <div>&#127908; <em>"Show me something more casual"</em></div>
+          <div>&#127908; <em>"Save this to my favorites"</em></div>
+          <div>&#127908; <em>"Build me an outfit for a party"</em></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="feature-card" style="margin-bottom:16px;">
+        <h3 style="color:#FF9900;">Real-Time Conversation</h3>
+        <p>Amazon Sonic 2 will enable natural, real-time voice interaction. Ask questions, get styling advice, and navigate products using just your voice.</p>
+      </div>
+      <div class="feature-card" style="margin-bottom:16px;">
+        <h3 style="color:#4FC3F7;">Context-Aware Shopping</h3>
+        <p>The voice agent will understand what product you're viewing, your preferences, and your try-on history to provide personalized assistance.</p>
+      </div>
+      <div class="feature-card">
+        <h3 style="color:#66BB6A;">Accessibility First</h3>
+        <p>Will make the entire shopping experience accessible to users who prefer voice interaction or have limited mobility.</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-number">12</div>
+</div>
+
+<!-- SLIDE 13: Benefits -->
 <div class="slide slide-gradient">
   <div class="brand-bar"></div>
   <h2>Key <span class="highlight">Benefits</span></h2>
@@ -467,109 +747,181 @@
     <div class="feature-card" style="text-align:center;">
       <div class="big-number" style="font-size:48px;">&#9889;</div>
       <h3>Instant Results</h3>
-      <p>Try-on results in seconds. No app downloads needed - works directly in your browser while shopping.</p>
-    </div>
-    <div class="feature-card" style="text-align:center;">
-      <div class="big-number" style="font-size:48px;">&#127908;</div>
-      <h3>Voice-First UX</h3>
-      <p>Amazon Sonic 2 enables natural voice shopping. Accessible, intuitive, and hands-free product discovery.</p>
+      <p>Try-on results in 15-30 seconds. No app downloads needed - works directly in your browser while shopping on Amazon.</p>
     </div>
     <div class="feature-card" style="text-align:center;">
       <div class="big-number" style="font-size:48px;">&#128270;</div>
       <h3>AI Discovery</h3>
-      <p>Nova Act browses Amazon like a personal shopping assistant. Describe what you want, get curated results.</p>
+      <p>Nova Act browses Amazon like a personal shopping assistant. Describe what you want in plain language, get curated results.</p>
+    </div>
+    <div class="feature-card" style="text-align:center;">
+      <div class="big-number" style="font-size:48px;">&#128090;</div>
+      <h3>Full Outfits</h3>
+      <p>Outfit Builder lets you compose complete looks with top, bottom, and shoes - try the whole outfit on at once.</p>
     </div>
     <div class="feature-card" style="text-align:center;">
       <div class="big-number" style="font-size:48px;">&#127760;</div>
       <h3>All-in-One</h3>
-      <p>Clothing, cosmetics, footwear, video animation, voice shopping - a complete AI-powered shopping companion.</p>
+      <p>Clothing, cosmetics, footwear, video animation, smart search, outfit builder - a complete AI shopping companion.</p>
     </div>
   </div>
-  <div class="slide-number">8</div>
+  <div class="slide-number">13</div>
 </div>
 
-<!-- SLIDE 9: Demo Flow -->
+<!-- SLIDE 14: Demo Flow -->
 <div class="slide slide-dark">
   <div class="brand-bar"></div>
   <h2>Live Demo <span class="highlight">Flow</span></h2>
-  <div style="flex:1; display:flex; flex-direction:column; justify-content:center; gap:20px;">
+  <div style="flex:1; display:flex; flex-direction:column; justify-content:center; gap:16px;">
+    <div style="text-align:center; margin-bottom:4px;">
+      <span class="tag tag-orange" style="font-size:14px;">Primary Flow: Product Page Try-On</span>
+    </div>
     <div class="flow">
-      <div class="flow-step" style="background:rgba(255,153,0,0.2); min-width:180px;">
-        <div style="font-size:28px;">&#128100;</div>
+      <div class="flow-step" style="background:rgba(255,153,0,0.2); min-width:170px;">
+        <div style="font-size:24px;">&#128100;</div>
         <strong>1. Sign Up</strong><br>
-        <small style="opacity:0.6;">Create account via Cognito<br>Upload body & face photos</small>
+        <small style="opacity:0.6;">Create account via Cognito<br>Upload 5 photos</small>
       </div>
       <div class="flow-arrow">&#8594;</div>
-      <div class="flow-step" style="background:rgba(255,153,0,0.2); min-width:180px;">
-        <div style="font-size:28px;">&#128270;</div>
-        <strong>2. Smart Search</strong><br>
-        <small style="opacity:0.6;">"Black dresses for women"<br>Nova Act browses Amazon</small>
+      <div class="flow-step" style="background:rgba(255,153,0,0.2); min-width:170px;">
+        <div style="font-size:24px;">&#10024;</div>
+        <strong>2. AI Poses</strong><br>
+        <small style="opacity:0.6;">Gemini generates 3<br>professional model poses</small>
       </div>
       <div class="flow-arrow">&#8594;</div>
-      <div class="flow-step" style="background:rgba(255,153,0,0.2); min-width:180px;">
-        <div style="font-size:28px;">&#128087;</div>
+      <div class="flow-step" style="background:rgba(255,153,0,0.2); min-width:170px;">
+        <div style="font-size:24px;">&#128087;</div>
         <strong>3. Try On</strong><br>
         <small style="opacity:0.6;">Click any product<br>See it on your body</small>
       </div>
       <div class="flow-arrow">&#8594;</div>
-      <div class="flow-step" style="background:rgba(255,153,0,0.2); min-width:180px;">
-        <div style="font-size:28px;">&#10084;</div>
-        <strong>4. Save & Buy</strong><br>
-        <small style="opacity:0.6;">Favorites, animate,<br>buy on Amazon</small>
+      <div class="flow-step" style="background:rgba(255,153,0,0.2); min-width:170px;">
+        <div style="font-size:24px;">&#127909;</div>
+        <strong>4. Animate</strong><br>
+        <small style="opacity:0.6;">Generate video with<br>Grok xAI</small>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-step" style="background:rgba(255,153,0,0.2); min-width:170px;">
+        <div style="font-size:24px;">&#10084;</div>
+        <strong>5. Save & Buy</strong><br>
+        <small style="opacity:0.6;">Save favorites<br>Buy on Amazon</small>
       </div>
     </div>
-    <div class="flow" style="margin-top:8px;">
-      <div class="flow-step" style="background:rgba(79,195,247,0.15); min-width:180px; border-color:rgba(79,195,247,0.3);">
-        <div style="font-size:28px;">&#127919;</div>
-        <strong>Alt: Product Page</strong><br>
-        <small style="opacity:0.6;">Browse Amazon normally<br>"Try It On" button appears</small>
+    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px; margin-top:8px;">
+      <div style="text-align:center;">
+        <div class="flow-step" style="background:rgba(79,195,247,0.15); border-color:rgba(79,195,247,0.3);">
+          <div style="font-size:24px;">&#128270;</div>
+          <strong>Alt: Smart Search</strong><br>
+          <small style="opacity:0.6;">"Black dresses for women"<br>Nova Act browses Amazon<br>Try on any result</small>
+        </div>
       </div>
-      <div class="flow-arrow">&#8594;</div>
-      <div class="flow-step" style="background:rgba(79,195,247,0.15); min-width:180px; border-color:rgba(79,195,247,0.3);">
-        <div style="font-size:28px;">&#128132;</div>
-        <strong>Cosmetics Mode</strong><br>
-        <small style="opacity:0.6;">Lipstick, eyeshadow,<br>blush, foundation</small>
+      <div style="text-align:center;">
+        <div class="flow-step" style="background:rgba(186,104,200,0.15); border-color:rgba(186,104,200,0.3);">
+          <div style="font-size:24px;">&#128090;</div>
+          <strong>Alt: Outfit Builder</strong><br>
+          <small style="opacity:0.6;">Describe top + bottom + shoes<br>AI builds wardrobe<br>Try full outfit together</small>
+        </div>
       </div>
-      <div class="flow-arrow">&#8594;</div>
-      <div class="flow-step" style="background:rgba(186,104,200,0.15); min-width:180px; border-color:rgba(186,104,200,0.3);">
-        <div style="font-size:28px;">&#127908;</div>
-        <strong>Voice Agent</strong><br>
-        <small style="opacity:0.6;">Sonic 2 voice commands<br>hands-free shopping</small>
-      </div>
-      <div class="flow-arrow">&#8594;</div>
-      <div class="flow-step" style="background:rgba(79,195,247,0.15); min-width:180px; border-color:rgba(79,195,247,0.3);">
-        <div style="font-size:28px;">&#127909;</div>
-        <strong>Animate</strong><br>
-        <small style="opacity:0.6;">Generate walking video<br>via Grok (xAI)</small>
+      <div style="text-align:center;">
+        <div class="flow-step" style="background:rgba(76,175,80,0.15); border-color:rgba(76,175,80,0.3);">
+          <div style="font-size:24px;">&#128132;</div>
+          <strong>Alt: Cosmetics</strong><br>
+          <small style="opacity:0.6;">Try lipstick, eyeshadow<br>blush, foundation<br>on your own face</small>
+        </div>
       </div>
     </div>
   </div>
-  <div class="slide-number">9</div>
+  <div class="slide-number">14</div>
 </div>
 
-<!-- SLIDE 10: Thank You -->
+<!-- SLIDE 15: Screenshot - Side Panel Profile -->
+<div class="slide screenshot-slide slide-dark">
+  <div class="brand-bar"></div>
+  <h2>App Screenshots: <span class="highlight">Side Panel & Profile</span></h2>
+  <p style="font-size:14px; opacity:0.6; margin-bottom:16px;">The Chrome side panel shows your AI-generated profile, pose selection (A/B/C), framing options, original photos, Smart Search, and Outfit Builder tabs</p>
+  <div style="flex:1; display:flex; gap:24px; align-items:center; justify-content:center;">
+    <img src="app-images/SuperNova TryOnMe Side Panel.jpg" style="height:520px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.1);" />
+    <img src="app-images/SuperNova TryOnMe Side Panel2.jpg" style="height:520px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.1);" />
+    <img src="app-images/SuperNova TryOnMe Side Panel3.jpg" style="height:520px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.1);" />
+  </div>
+  <div class="slide-number">15</div>
+</div>
+
+<!-- SLIDE 16: Screenshot - Product Page Try-On -->
+<div class="slide screenshot-slide slide-dark">
+  <div class="brand-bar"></div>
+  <h2>App Screenshots: <span class="highlight">Product Page Try-On</span></h2>
+  <p style="font-size:14px; opacity:0.6; margin-bottom:16px;">On any Amazon product page, the "Try It On" overlay shows the result with style tips, Save to Favorites, and Animate buttons. The side panel stays accessible for pose/framing changes.</p>
+  <div style="flex:1; display:flex; align-items:center; justify-content:center;">
+    <img src="app-images/Try-on - Focused Product Page Result.jpg" style="max-width:1100px; max-height:530px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.1);" />
+  </div>
+  <div class="slide-number">16</div>
+</div>
+
+<!-- SLIDE 17: Screenshot - Smart Search -->
+<div class="slide screenshot-slide slide-dark">
+  <div class="brand-bar"></div>
+  <h2>App Screenshots: <span class="highlight">AI Smart Search</span></h2>
+  <p style="font-size:14px; opacity:0.6; margin-bottom:16px;">Nova Act AI agent browses Amazon in real-time, applies quality filters, and returns a curated product grid. Every product has a "Try On" button for instant virtual try-on.</p>
+  <div style="flex:1; display:flex; gap:24px; align-items:center; justify-content:center;">
+    <div style="text-align:center;">
+      <img src="app-images/Searching with Nova Act.jpg" style="width:480px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.1); margin-bottom:8px;" />
+      <p style="font-size:12px; opacity:0.5;">Searching with Nova Act agent...</p>
+    </div>
+    <div style="text-align:center;">
+      <img src="app-images/SuperNova TryOnMe - Smart Search Result.jpg" style="width:480px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.1); margin-bottom:8px;" />
+      <p style="font-size:12px; opacity:0.5;">20 products found with Try On & Buy buttons</p>
+    </div>
+  </div>
+  <div class="slide-number">17</div>
+</div>
+
+<!-- SLIDE 18: Screenshot - Outfit Builder -->
+<div class="slide screenshot-slide slide-dark">
+  <div class="brand-bar"></div>
+  <h2>App Screenshots: <span class="highlight">Outfit Builder</span></h2>
+  <p style="font-size:14px; opacity:0.6; margin-bottom:16px;">The Virtual Wardrobe lets you pick tops, bottoms, and shoes from AI-curated Amazon results. Select items from each category and try the complete outfit on in a single generation.</p>
+  <div style="flex:1; display:flex; align-items:center; justify-content:center;">
+    <img src="app-images/Outfit Builder.jpg" style="max-width:1100px; max-height:530px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.1);" />
+  </div>
+  <div class="slide-number">18</div>
+</div>
+
+<!-- SLIDE 19: Screenshot - Favorites -->
+<div class="slide screenshot-slide slide-dark">
+  <div class="brand-bar"></div>
+  <h2>App Screenshots: <span class="highlight">My Favorites</span></h2>
+  <p style="font-size:14px; opacity:0.6; margin-bottom:16px;">Save your best try-on looks to revisit later. Each favorite stores the try-on result image, product info, and date. All data persisted in DynamoDB with images in S3.</p>
+  <div style="flex:1; display:flex; align-items:center; justify-content:center;">
+    <img src="app-images/SuperNova TryOnMe - Side Panel My Favorites.jpg" style="height:520px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.1);" />
+  </div>
+  <div class="slide-number">19</div>
+</div>
+
+<!-- SLIDE 20: Thank You -->
 <div class="slide slide-orange">
   <div class="center">
     <div style="font-size:72px; margin-bottom:16px;">&#10024;</div>
-    <h1 style="font-size:56px;">NovaTryOnMe</h1>
+    <h1 style="font-size:56px;">SuperNova TryOnMe</h1>
     <p style="font-size:28px; margin-top:16px; opacity:0.9;">The Future of Online Shopping is Here</p>
-    <div style="margin-top:48px; font-size:18px; opacity:0.85; line-height:2;">
-      <div>Virtual Try-On &bull; AI Smart Search &bull; Voice Shopping &bull; Video Animation</div>
-      <div style="margin-top:8px;">Powered by <strong>Amazon Nova AI</strong> + Gemini + Grok + Sonic 2</div>
+    <div style="margin-top:36px; font-size:18px; opacity:0.85; line-height:2;">
+      <div>Virtual Try-On &bull; AI Smart Search &bull; Outfit Builder &bull; Video Animation &bull; Cosmetics</div>
+      <div style="margin-top:8px;">Powered by <strong>Amazon Nova AI</strong> &bull; Gemini &bull; Grok xAI &bull; AWS</div>
     </div>
-    <div style="margin-top:48px; display:flex; gap:16px; flex-wrap:wrap; justify-content:center;">
-      <span class="tag" style="background:rgba(0,0,0,0.15); color:#fff; border:1px solid rgba(255,255,255,0.3);">Nova Lite</span>
+    <div style="margin-top:36px; display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
+      <span class="tag" style="background:rgba(0,0,0,0.15); color:#fff; border:1px solid rgba(255,255,255,0.3);">Nova 2 Lite</span>
+      <span class="tag" style="background:rgba(0,0,0,0.15); color:#fff; border:1px solid rgba(255,255,255,0.3);">Nova Canvas</span>
       <span class="tag" style="background:rgba(0,0,0,0.15); color:#fff; border:1px solid rgba(255,255,255,0.3);">Nova Act</span>
-      <span class="tag" style="background:rgba(0,0,0,0.15); color:#fff; border:1px solid rgba(255,255,255,0.3);">Grok (xAI)</span>
-      <span class="tag" style="background:rgba(0,0,0,0.15); color:#fff; border:1px solid rgba(255,255,255,0.3);">Sonic 2</span>
+      <span class="tag" style="background:rgba(0,0,0,0.15); color:#fff; border:1px solid rgba(255,255,255,0.3);">Grok xAI</span>
       <span class="tag" style="background:rgba(0,0,0,0.15); color:#fff; border:1px solid rgba(255,255,255,0.3);">Bedrock</span>
       <span class="tag" style="background:rgba(0,0,0,0.15); color:#fff; border:1px solid rgba(255,255,255,0.3);">Cognito</span>
       <span class="tag" style="background:rgba(0,0,0,0.15); color:#fff; border:1px solid rgba(255,255,255,0.3);">DynamoDB</span>
       <span class="tag" style="background:rgba(0,0,0,0.15); color:#fff; border:1px solid rgba(255,255,255,0.3);">S3</span>
+      <span class="tag" style="background:rgba(0,0,0,0.15); color:#fff; border:1px solid rgba(255,255,255,0.3);">Gemini 2.5 Flash</span>
     </div>
-    <p style="margin-top:40px; font-size:16px; opacity:0.7;">Thank you! &bull; AI for Bharat Hackathon 2025</p>
+    <p style="margin-top:36px; font-size:16px; opacity:0.7;">Thank you! &bull; AI for Bharat Hackathon 2025</p>
   </div>
-  <div class="slide-number" style="color:rgba(255,255,255,0.4);">10</div>
+  <div class="slide-number" style="color:rgba(255,255,255,0.4);">20</div>
 </div>
 
 </body>

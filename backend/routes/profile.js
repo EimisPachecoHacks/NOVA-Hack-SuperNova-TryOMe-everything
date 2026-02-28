@@ -275,6 +275,44 @@ router.post("/generate-photos", requireAuth, async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
+// PUT /api/profile/photos/original/:index - Replace a specific original photo
+// ---------------------------------------------------------------------------
+router.put("/photos/original/:index", requireAuth, async (req, res, next) => {
+  try {
+    const index = parseInt(req.params.index, 10);
+    if (isNaN(index) || index < 0 || index > 4) {
+      return res.status(400).json({ error: "index must be 0-4" });
+    }
+
+    const { image } = req.body;
+    if (!image) {
+      return res.status(400).json({ error: "image (base64) is required" });
+    }
+
+    const profile = await getProfile(req.userId);
+    if (!profile || !profile.originalPhotoKeys || !profile.originalPhotoKeys[index]) {
+      return res.status(404).json({ error: "Original photo not found at this index" });
+    }
+
+    // Overwrite the existing S3 key
+    const key = profile.originalPhotoKeys[index];
+    const buffer = Buffer.from(image, "base64");
+    await s3Client.send(new PutObjectCommand({
+      Bucket: S3_USER_BUCKET,
+      Key: key,
+      Body: buffer,
+      ContentType: "image/jpeg",
+    }));
+
+    console.log(`[profile] Replaced original photo [${index}]: ${key} (${(buffer.length / 1024).toFixed(0)} KB)`);
+
+    res.json({ success: true, index, key });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // GET /api/profile/photos/all - Get all 8 photos (5 original + 3 generated)
 // ---------------------------------------------------------------------------
 router.get("/photos/all", requireAuth, async (req, res, next) => {

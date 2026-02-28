@@ -61,6 +61,7 @@ async function addFavorite(userId, favoriteData) {
     category: favoriteData.category || "",
     garmentClass: favoriteData.garmentClass || "",
     tryOnResultKey: favoriteData.tryOnResultKey || "",
+    outfitId: favoriteData.outfitId || "",
     savedAt: new Date().toISOString(),
   };
   await docClient.send(new PutCommand({

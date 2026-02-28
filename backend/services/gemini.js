@@ -304,4 +304,86 @@ OUTPUT REQUIREMENTS:
   throw new Error("No image in Gemini profile photo response");
 }
 
-module.exports = { virtualTryOn, extractGarment, buildSmartPrompt, generateProfilePhoto };
+/**
+ * Virtual Try-On for a complete outfit in a SINGLE Gemini call.
+ * Sends person image + all garment images at once.
+ *
+ * @param {string} sourceImageBase64 - The person's photo
+ * @param {Array<{imageBase64: string, garmentClass: string, label: string}>} garments - Array of garments
+ * @param {string} framing - "full" or "half"
+ * @returns {string} base64 result image
+ */
+async function virtualTryOnOutfit(sourceImageBase64, garments, framing) {
+  console.log(`\x1b[1m\x1b[34m  ┌─── GEMINI OUTFIT TRY-ON (SINGLE CALL) ───┐\x1b[0m`);
+  console.log(`\x1b[34m  │ garments:\x1b[0m     \x1b[1m${garments.length}\x1b[0m`);
+  garments.forEach((g, i) => {
+    console.log(`\x1b[34m  │   [${i}] ${g.garmentClass} (${g.label}) — ${g.imageBase64.length} chars\x1b[0m`);
+  });
+  console.log(`\x1b[34m  │ framing:\x1b[0m      \x1b[1m${framing || "full"}\x1b[0m`);
+  console.log(`\x1b[34m  │ sourceImage:\x1b[0m  ${sourceImageBase64?.length || 0} chars`);
+
+  const client = getClient();
+
+  const isHalfBody = framing === "half";
+  const FRAMING = isHalfBody
+    ? "Frame the output as a half-body photo from the waist up."
+    : "Frame the output as a full-body photo showing the person from head to toe, including feet and shoes. Do not crop at the waist or knees.";
+
+  // Build garment description list for the prompt
+  const garmentLabels = garments.map((g, i) => `Image ${i + 2}: ${g.label}`).join("\n");
+
+  const prompt = `You are a professional virtual try-on system. You will receive ${garments.length + 1} images:
+Image 1: A real person (the customer)
+${garmentLabels}
+
+YOUR TASK: Generate a single photo of the EXACT same person from Image 1 wearing ALL the garments from the other images simultaneously as a complete outfit.
+
+RULES:
+- Replace the person's current clothing with ALL the provided garments
+- Each garment goes on its correct body part (top on upper body, bottom on lower body, shoes on feet)
+- The garments must look natural together as a coordinated outfit
+- CRITICAL: The output MUST be the EXACT same person from Image 1 — same face, same skin tone, same body, same hair. Do NOT generate a different person. Do NOT alter their facial features, do NOT change their skin tone. Identity fidelity is the #1 priority.
+- White studio background. Photorealistic. Output only the image.
+- ${FRAMING}`;
+
+  // Build contents array: person image + all garment images
+  const parts = [
+    { text: "This is the person. Keep this EXACT person — same face, skin, body, hair:" },
+    { inlineData: { mimeType: "image/jpeg", data: sourceImageBase64 } },
+  ];
+
+  garments.forEach((g) => {
+    parts.push({ text: `This is the ${g.label} to put on the person:` });
+    parts.push({ inlineData: { mimeType: "image/jpeg", data: g.imageBase64 } });
+  });
+
+  parts.push({ text: prompt });
+
+  console.log(`\x1b[34m  └─── CALLING GEMINI API (single outfit call)... ───┘\x1b[0m`);
+
+  const response = await client.models.generateContent({
+    model: "gemini-2.5-flash-image",
+    contents: [{ role: "user", parts }],
+    config: {
+      responseModalities: ["TEXT", "IMAGE"],
+      systemInstruction: "You are a virtual clothing try-on system. You will receive a person photo and multiple garment photos. Your ONLY job is to produce a single photo-realistic image of the EXACT same person wearing ALL the provided garments as a complete outfit. IDENTITY RULE: The output person must have the IDENTICAL face, facial bone structure, nose, eyes, eyebrows, lips, skin color, hair color, hair style, and body proportions as the person image. Do NOT replace them with a model, do NOT alter their facial features, do NOT change their skin tone. If you cannot preserve the identity perfectly, try harder — identity fidelity is the #1 priority, above all else.",
+    },
+  });
+
+  const candidates = response.candidates || [];
+  if (!candidates.length) {
+    throw new Error("No response from Gemini for outfit try-on");
+  }
+
+  const responseParts = candidates[0].content?.parts || [];
+  for (const part of responseParts) {
+    if (part.inlineData) {
+      console.log(`\x1b[32m  ✓ GEMINI OUTFIT RESPONSE RECEIVED\x1b[0m — image: ${part.inlineData.data.length} chars`);
+      return part.inlineData.data;
+    }
+  }
+
+  throw new Error("No image in Gemini outfit try-on response");
+}
+
+module.exports = { virtualTryOn, virtualTryOnOutfit, extractGarment, buildSmartPrompt, generateProfilePhoto };

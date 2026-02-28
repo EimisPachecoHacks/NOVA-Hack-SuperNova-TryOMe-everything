@@ -11,8 +11,6 @@ const DEFAULT_BACKEND_URL = 'http://localhost:3000';
 let pendingSignupEmail = '';
 let bodyPhotoBase64 = null;
 let facePhotoBase64 = null;
-let editBodyPhotoBase64 = null;
-let editFacePhotoBase64 = null;
 let cachedProfile = null;
 
 // Multi-photo upload state for wizard step 2
@@ -476,10 +474,36 @@ async function showFavoritesView() {
     // Sort by savedAt descending (newest first)
     favorites.sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
 
+    // Group by outfitId (items with same outfitId are one outfit, items without are solo)
+    const outfitGroups = new Map(); // outfitId → [fav, ...]
+    const soloItems = [];
+    favorites.forEach((fav) => {
+      if (fav.outfitId) {
+        if (!outfitGroups.has(fav.outfitId)) outfitGroups.set(fav.outfitId, []);
+        outfitGroups.get(fav.outfitId).push(fav);
+      } else {
+        soloItems.push(fav);
+      }
+    });
+
+    // Build a flat render list: each entry is either {type:'outfit', items:[...]} or {type:'solo', fav}
+    const renderList = [];
+    outfitGroups.forEach((items) => renderList.push({ type: 'outfit', items, savedAt: items[0].savedAt }));
+    soloItems.forEach((fav) => renderList.push({ type: 'solo', fav, savedAt: fav.savedAt }));
+    renderList.sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
+
     container.innerHTML = '<div class="favorites-list" id="favoritesList"></div>';
     const list = document.getElementById('favoritesList');
 
-    favorites.forEach((fav) => {
+    renderList.forEach((entry) => {
+      if (entry.type === 'outfit') {
+        renderOutfitCard(list, container, entry.items);
+      } else {
+        renderSoloCard(list, container, entry.fav);
+      }
+    });
+
+    function renderSoloCard(list, container, fav) {
       const card = document.createElement('div');
       card.className = 'fav-card';
 
@@ -501,59 +525,109 @@ async function showFavoritesView() {
         <button class="fav-card-remove" title="Remove" data-asin="${fav.asin}">&times;</button>
       `;
 
-      // Click card → open Amazon product page
       card.addEventListener('click', (e) => {
         if (e.target.classList.contains('fav-card-remove')) return;
-        if (fav.asin) {
-          chrome.tabs.create({ url: `https://www.amazon.com/dp/${fav.asin}` });
-        }
+        if (fav.asin) chrome.tabs.create({ url: `https://www.amazon.com/dp/${fav.asin}` });
       });
 
-      // Remove button
       const removeBtn = card.querySelector('.fav-card-remove');
       removeBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         try {
-          await sendMsg({
-            type: 'API_CALL', endpoint: `/api/favorites/${fav.asin}`, method: 'DELETE', data: {}
-          });
+          await sendMsg({ type: 'API_CALL', endpoint: `/api/favorites/${fav.asin}`, method: 'DELETE', data: {} });
           card.remove();
-          // Update count and check if list is now empty
-          const remaining = list.querySelectorAll('.fav-card').length;
-          if (remaining === 0) {
+          if (list.querySelectorAll('.fav-card, .fav-outfit-card').length === 0) {
             container.innerHTML = '<div class="favorites-empty">No favorites yet.<br>Use the &#9825; button on try-on results to save items here.</div>';
           }
-        } catch (err) {
-          console.error('[popup] Failed to remove favorite:', err);
-        }
+        } catch (err) { console.error('[popup] Failed to remove favorite:', err); }
       });
 
       list.appendChild(card);
+      loadTryOnImage(fav);
+    }
 
-      // Fetch try-on image from S3 via backend proxy
-      if (hasTryOnKey) {
-        sendMsg({
-          type: 'API_CALL', endpoint: `/api/favorites/${fav.asin}/image`, method: 'GET', data: {}
-        }).then((imgData) => {
-          if (imgData && imgData.image) {
-            const imgEl = document.getElementById(`tryonImg_${fav.asin}`);
-            if (imgEl) {
-              imgEl.src = `data:image/jpeg;base64,${imgData.image}`;
-              imgEl.style.display = '';
-              imgEl.style.cursor = 'pointer';
-              imgEl.addEventListener('click', (e) => {
-                e.stopPropagation();
-                document.getElementById('lightboxImg').src = imgEl.src;
-                document.getElementById('imageLightbox').classList.add('active');
-              });
-              console.log(`[popup] Try-on image loaded for ${fav.asin}`);
-            }
-          }
-        }).catch((err) => {
-          console.warn(`[popup] Failed to load try-on image for ${fav.asin}:`, err.message);
+    function renderOutfitCard(list, container, items) {
+      const card = document.createElement('div');
+      card.className = 'fav-outfit-card';
+
+      const date = items[0].savedAt ? new Date(items[0].savedAt).toLocaleDateString() : '';
+      // Use first item's try-on image (all share the same result)
+      const firstWithKey = items.find(i => i.tryOnResultKey);
+      const tryOnImgId = firstWithKey ? `tryonImg_outfit_${firstWithKey.asin}` : '';
+
+      const productThumbs = items.map(i =>
+        `<img class="fav-outfit-thumb" src="${i.productImage || ''}" alt="${i.category}" title="${i.productTitle || i.category}" data-asin="${i.asin}">`
+      ).join('');
+
+      const itemLinks = items.map(i => {
+        const shortTitle = (i.productTitle || i.category || 'Item').split(' ').slice(0, 4).join(' ');
+        return `<a class="fav-outfit-link" href="#" data-asin="${i.asin}">${shortTitle}</a>`;
+      }).join('');
+
+      card.innerHTML = `
+        <div class="fav-outfit-images">
+          ${tryOnImgId ? `<img class="fav-card-img fav-card-tryon" id="${tryOnImgId}" src="" alt="Try-on" style="display:none">` : ''}
+          <div class="fav-outfit-thumbs">${productThumbs}</div>
+        </div>
+        <div class="fav-card-body">
+          <div class="fav-card-title">Outfit (${items.length} items)</div>
+          <div class="fav-outfit-items">${itemLinks}</div>
+          <div class="fav-card-meta">${date}</div>
+        </div>
+        <button class="fav-outfit-remove" title="Remove outfit">&times;</button>
+      `;
+
+      // Click product thumb → open that item on Amazon
+      card.querySelectorAll('.fav-outfit-thumb, .fav-outfit-link').forEach(el => {
+        el.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const asin = el.dataset.asin;
+          if (asin) chrome.tabs.create({ url: `https://www.amazon.com/dp/${asin}` });
         });
-      }
-    });
+      });
+
+      // Remove entire outfit
+      card.querySelector('.fav-outfit-remove').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          for (const item of items) {
+            await sendMsg({ type: 'API_CALL', endpoint: `/api/favorites/${item.asin}`, method: 'DELETE', data: {} });
+          }
+          card.remove();
+          if (list.querySelectorAll('.fav-card, .fav-outfit-card').length === 0) {
+            container.innerHTML = '<div class="favorites-empty">No favorites yet.<br>Use the &#9825; button on try-on results to save items here.</div>';
+          }
+        } catch (err) { console.error('[popup] Failed to remove outfit:', err); }
+      });
+
+      list.appendChild(card);
+      if (firstWithKey) loadTryOnImage(firstWithKey, tryOnImgId);
+    }
+
+    function loadTryOnImage(fav, customId) {
+      if (!fav.tryOnResultKey) return;
+      const imgId = customId || `tryonImg_${fav.asin}`;
+      sendMsg({
+        type: 'API_CALL', endpoint: `/api/favorites/${fav.asin}/image`, method: 'GET', data: {}
+      }).then((imgData) => {
+        if (imgData && imgData.image) {
+          const imgEl = document.getElementById(imgId);
+          if (imgEl) {
+            imgEl.src = `data:image/jpeg;base64,${imgData.image}`;
+            imgEl.style.display = '';
+            imgEl.style.cursor = 'pointer';
+            imgEl.addEventListener('click', (e) => {
+              e.stopPropagation();
+              document.getElementById('lightboxImg').src = imgEl.src;
+              document.getElementById('imageLightbox').classList.add('active');
+            });
+          }
+        }
+      }).catch((err) => {
+        console.warn(`[popup] Failed to load try-on image for ${fav.asin}:`, err.message);
+      });
+    }
   } catch (err) {
     console.error('[popup] Failed to load favorites:', err);
     container.innerHTML = '<div class="favorites-empty">Failed to load favorites.</div>';
@@ -562,10 +636,9 @@ async function showFavoritesView() {
 
 // ---------------------------------------------------------------------------
 
-async function showEditProfile() {
-  editBodyPhotoBase64 = null;
-  editFacePhotoBase64 = null;
+let editOriginalReplaceIndex = null;
 
+async function showEditProfile() {
   // Pre-fill personal info from cached profile
   if (cachedProfile) {
     document.getElementById('editFirstName').value = cachedProfile.firstName || '';
@@ -579,30 +652,25 @@ async function showEditProfile() {
     }
   }
 
-  // Reset photo upload states
-  document.getElementById('editBodyPreview').hidden = true;
-  document.getElementById('editBodySaveBtn').hidden = true;
-  document.getElementById('editFacePreview').hidden = true;
-  document.getElementById('editFaceSaveBtn').hidden = true;
-
-  // Load current photos
+  // Load all 5 original photos
   try {
-    const bodyData = await sendMsg({
-      type: 'API_CALL', endpoint: '/api/profile/photo/body', method: 'GET', data: {}
+    const allPhotos = await sendMsg({
+      type: 'API_CALL', endpoint: '/api/profile/photos/all', method: 'GET', data: {}
     });
-    if (bodyData.image) {
-      document.getElementById('editBodyCurrentImg').src = `data:image/jpeg;base64,${bodyData.image}`;
+    if (allPhotos.originals && allPhotos.originals.length > 0) {
+      for (let i = 0; i < 5; i++) {
+        const img = document.getElementById(`editOrigImg${i}`);
+        if (allPhotos.originals[i]) {
+          img.src = `data:image/jpeg;base64,${allPhotos.originals[i]}`;
+        } else {
+          img.src = '';
+          img.alt = 'No photo';
+        }
+      }
     }
-  } catch (_) { /* ignore */ }
-
-  try {
-    const faceData = await sendMsg({
-      type: 'API_CALL', endpoint: '/api/profile/photo/face', method: 'GET', data: {}
-    });
-    if (faceData.image) {
-      document.getElementById('editFaceCurrentImg').src = `data:image/jpeg;base64,${faceData.image}`;
-    }
-  } catch (_) { /* ignore */ }
+  } catch (err) {
+    console.warn('[popup] Failed to load original photos:', err.message);
+  }
 
   showView('viewEditProfile');
 }
@@ -635,80 +703,82 @@ async function handleEditSaveInfo() {
   }
 }
 
-async function handleEditBodyUpload(file) {
-  if (!ALLOWED_TYPES.includes(file.type)) {
-    alert('Please upload a JPEG, PNG, or WebP image.');
-    return;
-  }
-  try {
-    const result = await processImage(file);
-    editBodyPhotoBase64 = result.base64;
-    document.getElementById('editBodyPreview').hidden = false;
-    document.getElementById('editBodyPreviewImg').src = `data:image/jpeg;base64,${result.base64}`;
-    document.getElementById('editBodyInfo').textContent = `${result.width} x ${result.height} - ${result.sizeKB} KB`;
-    document.getElementById('editBodySaveBtn').hidden = false;
-  } catch (err) {
-    alert('Failed to process image: ' + err.message);
-  }
-}
-
-async function handleEditBodySave() {
-  if (!editBodyPhotoBase64) return;
-  const btn = document.getElementById('editBodySaveBtn');
+async function handleEditRegenAiPhotos() {
+  const btn = document.getElementById('editRegenAiBtn');
+  const statusEl = document.getElementById('editRegenStatus');
   setLoading(btn, true);
+  statusEl.hidden = false;
+  statusEl.textContent = 'Fetching your original photos...';
+
   try {
-    await sendMsg({
-      type: 'API_CALL', endpoint: '/api/profile/photos', method: 'POST',
-      data: { type: 'body', image: editBodyPhotoBase64 }
+    // Fetch current originals from S3 (same data showEditProfile already loads)
+    const allPhotos = await sendMsg({
+      type: 'API_CALL', endpoint: '/api/profile/photos/all', method: 'GET', data: {}
     });
-    await chrome.storage.local.set({ bodyPhoto: editBodyPhotoBase64 });
-    // Update current preview
-    document.getElementById('editBodyCurrentImg').src = `data:image/jpeg;base64,${editBodyPhotoBase64}`;
-    document.getElementById('editBodyPreview').hidden = true;
-    btn.hidden = true;
-    editBodyPhotoBase64 = null;
+
+    if (!allPhotos.originals || allPhotos.originals.filter(Boolean).length < 5) {
+      alert('All 5 original photos are required before regenerating.');
+      return;
+    }
+
+    statusEl.textContent = 'Generating 3 AI pose photos... This may take a minute.';
+    const startTime = Date.now();
+
+    // Call the SAME endpoint used during account creation
+    const result = await sendMsg({
+      type: 'API_CALL', endpoint: '/api/profile/generate-photos', method: 'POST',
+      data: { userImages: allPhotos.originals }
+    });
+
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+    const successCount = result.generatedPhotos ? result.generatedPhotos.filter(Boolean).length : 0;
+
+    // Update chrome.storage with new generated photo (same logic as wizard)
+    if (result.generatedPhotos && result.generatedPhotos[0]) {
+      await chrome.storage.local.set({
+        bodyPhoto: result.generatedPhotos[0],
+        selectedPoseIndex: 0
+      });
+    }
+
+    statusEl.textContent = `Done! ${successCount}/3 photos generated in ${totalTime}s`;
+    btn.textContent = 'Regenerate AI Photos';
+    setTimeout(() => { statusEl.hidden = true; }, 5000);
   } catch (err) {
-    alert('Failed to upload body photo: ' + err.message);
+    statusEl.textContent = 'Failed: ' + err.message;
   } finally {
     setLoading(btn, false);
   }
 }
 
-async function handleEditFaceUpload(file) {
+async function handleEditOriginalReplace(file, index) {
   if (!ALLOWED_TYPES.includes(file.type)) {
     alert('Please upload a JPEG, PNG, or WebP image.');
     return;
   }
+  const item = document.querySelector(`.edit-original-item[data-index="${index}"]`);
+  const btn = item.querySelector('.edit-original-change-btn');
+  const origText = btn.textContent;
+  btn.textContent = 'Uploading...';
+  btn.disabled = true;
+  item.classList.add('uploading');
+
   try {
     const result = await processImage(file);
-    editFacePhotoBase64 = result.base64;
-    document.getElementById('editFacePreview').hidden = false;
-    document.getElementById('editFacePreviewImg').src = `data:image/jpeg;base64,${result.base64}`;
-    document.getElementById('editFaceInfo').textContent = `${result.width} x ${result.height} - ${result.sizeKB} KB`;
-    document.getElementById('editFaceSaveBtn').hidden = false;
-  } catch (err) {
-    alert('Failed to process image: ' + err.message);
-  }
-}
-
-async function handleEditFaceSave() {
-  if (!editFacePhotoBase64) return;
-  const btn = document.getElementById('editFaceSaveBtn');
-  setLoading(btn, true);
-  try {
     await sendMsg({
-      type: 'API_CALL', endpoint: '/api/profile/photos', method: 'POST',
-      data: { type: 'face', image: editFacePhotoBase64 }
+      type: 'API_CALL', endpoint: `/api/profile/photos/original/${index}`, method: 'PUT',
+      data: { image: result.base64 }
     });
-    await chrome.storage.local.set({ facePhoto: editFacePhotoBase64 });
-    document.getElementById('editFaceCurrentImg').src = `data:image/jpeg;base64,${editFacePhotoBase64}`;
-    document.getElementById('editFacePreview').hidden = true;
-    btn.hidden = true;
-    editFacePhotoBase64 = null;
+    // Update the displayed image
+    document.getElementById(`editOrigImg${index}`).src = `data:image/jpeg;base64,${result.base64}`;
+    btn.textContent = 'Done!';
+    setTimeout(() => { btn.textContent = origText; }, 1500);
   } catch (err) {
-    alert('Failed to upload face photo: ' + err.message);
+    alert('Failed to replace photo: ' + err.message);
+    btn.textContent = origText;
   } finally {
-    setLoading(btn, false);
+    btn.disabled = false;
+    item.classList.remove('uploading');
   }
 }
 
@@ -1016,37 +1086,64 @@ async function init() {
     });
   });
 
-  // Smart Search
+  // Smart Search / Outfit Builder tab switching
+  document.querySelectorAll('.search-mode-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.search-mode-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const isSingle = tab.dataset.mode === 'single';
+      document.getElementById('panelSmartSearch').classList.toggle('hidden', !isSingle);
+      document.getElementById('panelOutfitBuilder').classList.toggle('hidden', isSingle);
+    });
+  });
+
   document.getElementById('smartSearchBtn').addEventListener('click', handleSmartSearch);
   document.getElementById('smartSearchInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') handleSmartSearch();
+  });
+
+  // Outfit Builder — open Virtual Wardrobe in a new tab
+  document.getElementById('outfitBuildBtn').addEventListener('click', () => {
+    const top = document.getElementById('outfitTop').value.trim();
+    const bottom = document.getElementById('outfitBottom').value.trim();
+    const shoes = document.getElementById('outfitShoes').value.trim();
+    const errorEl = document.getElementById('outfitBuildError');
+    errorEl.textContent = '';
+    if (!top && !bottom) {
+      errorEl.textContent = 'Please describe at least a top or bottom';
+      return;
+    }
+    const params = new URLSearchParams();
+    if (top) params.set('top', top);
+    if (bottom) params.set('bottom', bottom);
+    if (shoes) params.set('shoes', shoes);
+    const url = chrome.runtime.getURL('outfit-builder/wardrobe.html') + '?' + params.toString();
+    chrome.tabs.create({ url });
   });
 
   // Edit profile
   document.getElementById('editProfileBtn').addEventListener('click', showEditProfile);
   document.getElementById('editProfileBack').addEventListener('click', () => loadProfileAndRoute());
   document.getElementById('editSaveInfoBtn').addEventListener('click', handleEditSaveInfo);
-  document.getElementById('editBodySaveBtn').addEventListener('click', handleEditBodySave);
-  document.getElementById('editFaceSaveBtn').addEventListener('click', handleEditFaceSave);
-
+  document.getElementById('editRegenAiBtn').addEventListener('click', handleEditRegenAiPhotos);
   // Edit profile birthday auto-age
   document.getElementById('editBirthday').addEventListener('change', (e) => {
     const age = calculateAge(e.target.value);
     document.getElementById('editAgeDisplay').textContent = age > 0 ? `Age: ${age}` : '';
   });
 
-  // Edit profile upload areas — "Change Photo" buttons trigger file inputs
-  document.getElementById('editBodyUploadBtn').addEventListener('click', () => {
-    document.getElementById('editBodyFileInput').click();
+  // Edit profile — 5-photo grid "Change" buttons + shared file input
+  document.querySelectorAll('.edit-original-change-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      editOriginalReplaceIndex = parseInt(btn.dataset.index, 10);
+      document.getElementById('editOriginalFileInput').click();
+    });
   });
-  document.getElementById('editBodyFileInput').addEventListener('change', (e) => {
-    if (e.target.files.length > 0) handleEditBodyUpload(e.target.files[0]);
-  });
-  document.getElementById('editFaceUploadBtn').addEventListener('click', () => {
-    document.getElementById('editFaceFileInput').click();
-  });
-  document.getElementById('editFaceFileInput').addEventListener('change', (e) => {
-    if (e.target.files.length > 0) handleEditFaceUpload(e.target.files[0]);
+  document.getElementById('editOriginalFileInput').addEventListener('change', (e) => {
+    if (e.target.files.length > 0 && editOriginalReplaceIndex !== null) {
+      handleEditOriginalReplace(e.target.files[0], editOriginalReplaceIndex);
+      e.target.value = '';
+    }
   });
 
   // Image lightbox — click any profile photo to view full size

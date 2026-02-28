@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SuperNova TryOnMe — Virtual Wardrobe</title>
+  <link rel="stylesheet" href="wardrobe.css" />
+</head>
+<body>
+  <div class="vw-closet">
+    <!-- App header -->
+    <div class="vw-app-header">
+      <span class="vw-app-logo">&#10024;</span>
+      <span class="vw-app-name">SuperNova TryOnMe</span>
+      <span class="vw-app-subtitle">Virtual Wardrobe</span>
+    </div>
+
+    <!-- Ambient light overlay -->
+    <div class="ambient-light-overlay"></div>
+
+    <!-- Loading overlay (shown while searches run) -->
+    <div class="vw-loading-overlay" id="loadingOverlay">
+      <div class="vw-loading-spinner"></div>
+      <h2>Building your wardrobe...</h2>
+      <p>AI is searching Amazon for matching items</p>
+      <p class="vw-loading-hint">This may take 30–60 seconds per category</p>
+      <div class="vw-loading-categories">
+        <div class="vw-loading-cat" id="loadingTop">
+          <span class="vw-loading-icon">&#128085;</span>
+          <span class="vw-loading-label">Upper Wear</span>
+          <span class="vw-loading-status" id="loadingTopStatus">Waiting...</span>
+        </div>
+        <div class="vw-loading-cat" id="loadingBottom">
+          <span class="vw-loading-icon">&#128086;</span>
+          <span class="vw-loading-label">Lower Wear</span>
+          <span class="vw-loading-status" id="loadingBottomStatus">Waiting...</span>
+        </div>
+        <div class="vw-loading-cat" id="loadingShoes">
+          <span class="vw-loading-icon">&#128094;</span>
+          <span class="vw-loading-label">Shoes</span>
+          <span class="vw-loading-status" id="loadingShoesStatus">Waiting...</span>
+        </div>
+      </div>
+      <p class="vw-loading-timer" id="searchTimer">Elapsed: 0s</p>
+    </div>
+
+    <!-- Error state -->
+    <div class="vw-error" id="errorState" hidden>
+      <div class="vw-error-icon">&#9888;</div>
+      <h2>Something went wrong</h2>
+      <p id="errorMessage"></p>
+      <button class="vw-btn-primary" id="errorCloseBtn">Close</button>
+    </div>
+
+    <!-- Main wardrobe (hidden until results arrive) -->
+    <div class="closet-room" id="closetRoom" hidden>
+      <!-- Ceiling lights -->
+      <div class="closet-ceiling">
+        <div class="ceiling-light"></div>
+        <div class="ceiling-light"></div>
+        <div class="ceiling-light"></div>
+      </div>
+
+      <!-- Left Wall: Tops -->
+      <div class="closet-wall wall-left">
+        <div class="wall-label">Upper Wear</div>
+        <div class="hangers-container" id="topsContainer"></div>
+      </div>
+
+      <!-- Center Mirror -->
+      <div class="closet-center-space">
+        <!-- Selected item info bar -->
+        <div class="vw-selected-info" id="selectedInfo" hidden>
+          <span class="vw-selected-label">Selected:</span>
+          <span class="vw-selected-name" id="selectedName"></span>
+          <span class="vw-selected-price" id="selectedPrice"></span>
+        </div>
+
+        <!-- Mirror frame -->
+        <div class="glass-display-case">
+          <div class="glass-case-frame" id="mirrorFrame">
+            <div class="glass-top"></div>
+            <div class="mirror-accent mirror-accent-top"></div>
+            <div class="mirror-accent mirror-accent-bottom"></div>
+            <div class="mirror-accent mirror-accent-left"></div>
+            <div class="mirror-accent mirror-accent-right"></div>
+
+            <div class="glass-panels">
+              <div class="spotlight spotlight-top" id="spotlightTop"></div>
+              <div class="spotlight spotlight-bottom" id="spotlightBottom"></div>
+
+              <div class="video-container" id="mirrorContent">
+                <div class="mirror-placeholder" id="mirrorPlaceholder">
+                  <div class="mirror-emoji">&#129695;</div>
+                  <div>Loading your photo...</div>
+                </div>
+                <img class="mirror-photo" id="mirrorPhoto" hidden alt="Your pose" />
+                <img class="mirror-result" id="mirrorResult" hidden alt="Try-on result" />
+              </div>
+
+              <!-- Loading overlay inside mirror -->
+              <div class="vw-tryon-loading" id="tryOnLoading" hidden>
+                <div class="vw-tryon-spinner"></div>
+                <p id="tryOnStatus">Preparing virtual try-on...</p>
+                <p class="vw-loading-hint">This may take 15–30 seconds</p>
+                <p class="vw-loading-timer" id="tryOnTimer">0s</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Controls below mirror -->
+        <div class="vw-controls" id="controlBar">
+          <button class="vw-btn-tryon" id="tryOnBtn" disabled>&#10024; Try On</button>
+          <button class="vw-btn-favorite" id="favoriteBtn" hidden>&#9825; Save to Favorites</button>
+          <a class="vw-btn-buy" id="buyBtn" href="#" target="_blank" rel="noopener" hidden>Buy on Amazon</a>
+        </div>
+      </div>
+
+      <!-- Right Wall: Bottoms -->
+      <div class="closet-wall wall-right">
+        <div class="wall-label">Lower Wear</div>
+        <div class="hangers-container" id="bottomsContainer"></div>
+      </div>
+    </div>
+
+    <!-- Shoe Rack (bottom) -->
+    <div class="shoe-rack-container" id="shoeRackContainer" hidden>
+      <div class="shoe-rack">
+        <div class="shoe-rack-display">
+          <div class="shoes-horizontal-grid" id="shoesContainer"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="wardrobe.js"></script>
+</body>
+</html>

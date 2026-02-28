@@ -4,16 +4,25 @@
  * Receives search query via URL params, calls backend via background.js,
  * displays product grid, and enables virtual try-on for each product.
  *
+ * Uses the same ApiClient class as the Focused Product Page (content.js)
+ * to ensure identical pipeline behavior.
+ *
  * NOTE: No inline event handlers (onclick) — Chrome extension CSP forbids them.
  */
 
 // ---------------------------------------------------------------------------
-// Init
+// State
 // ---------------------------------------------------------------------------
-
 let searchStartTime = 0;
 let timerInterval = null;
+let tryOnTimerInterval = null;
+let tryOnStartTime = 0;
+let currentPoseIndex = 0;
+let currentFraming = 'full';
 
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
 const params = new URLSearchParams(window.location.search);
 const query = params.get("q") || "";
 
@@ -24,7 +33,6 @@ document.getElementById("searchQuery").textContent = query
 // Wire up non-inline event listeners
 document.getElementById("errorCloseBtn").addEventListener("click", () => window.close());
 document.getElementById("modalCloseBtn").addEventListener("click", closeTryOnModal);
-// Close modal when clicking overlay background or any close button inside
 document.getElementById("tryOnModal").addEventListener("click", (e) => {
   if (
     e.target.id === "tryOnModal" ||
@@ -38,6 +46,17 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeTryOnModal();
 });
 
+// Load pose/framing from storage (same as content.js)
+chrome.storage.local.get(["selectedPoseIndex", "tryOnFraming"], (stored) => {
+  if (stored.selectedPoseIndex !== undefined) currentPoseIndex = stored.selectedPoseIndex;
+  if (stored.tryOnFraming) currentFraming = stored.tryOnFraming;
+});
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  if (changes.selectedPoseIndex) currentPoseIndex = changes.selectedPoseIndex.newValue || 0;
+  if (changes.tryOnFraming) currentFraming = changes.tryOnFraming.newValue || "full";
+});
+
 if (query) {
   startSearch(query);
 } else {
@@ -47,7 +66,6 @@ if (query) {
 // ---------------------------------------------------------------------------
 // Search Timer
 // ---------------------------------------------------------------------------
-
 function startTimer() {
   searchStartTime = Date.now();
   const timerEl = document.getElementById("searchTimer");
@@ -66,14 +84,13 @@ function stopTimer() {
 }
 
 // ---------------------------------------------------------------------------
-// Search
+// Search (uses ApiClient._sendMessage for SMART_SEARCH which has no wrapper)
 // ---------------------------------------------------------------------------
-
 async function startSearch(q) {
   showLoading();
   startTimer();
   try {
-    const result = await sendMessage({
+    const result = await ApiClient._sendMessage({
       type: "SMART_SEARCH",
       query: q,
     });
@@ -102,7 +119,6 @@ async function startSearch(q) {
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
-
 function showLoading() {
   document.getElementById("loadingState").hidden = false;
   document.getElementById("errorState").hidden = true;
@@ -124,7 +140,6 @@ function renderResults(products, elapsedSeconds) {
   document.getElementById("resultCount").textContent =
     `${products.length} product${products.length !== 1 ? "s" : ""} found`;
 
-  // Show search duration
   if (elapsedSeconds !== undefined) {
     const timeEl = document.getElementById("searchTime");
     const mins = Math.floor(elapsedSeconds / 60);
@@ -137,8 +152,7 @@ function renderResults(products, elapsedSeconds) {
   grid.innerHTML = "";
 
   products.forEach((product, index) => {
-    const card = createProductCard(product, index);
-    grid.appendChild(card);
+    grid.appendChild(createProductCard(product, index));
   });
 }
 
@@ -147,7 +161,6 @@ function createProductCard(product, index) {
   card.className = "nova-card";
   card.dataset.product = JSON.stringify(product);
 
-  // Image
   const img = document.createElement("img");
   img.className = "nova-card-image";
   img.src = product.image_url;
@@ -161,11 +174,9 @@ function createProductCard(product, index) {
   });
   card.appendChild(img);
 
-  // Body
   const body = document.createElement("div");
   body.className = "nova-card-body";
 
-  // Title
   const titleDiv = document.createElement("div");
   titleDiv.className = "nova-card-title";
   const titleLink = document.createElement("a");
@@ -176,7 +187,6 @@ function createProductCard(product, index) {
   titleDiv.appendChild(titleLink);
   body.appendChild(titleDiv);
 
-  // Rating (if available)
   if (product.rating) {
     const ratingDiv = document.createElement("div");
     ratingDiv.className = "nova-card-rating";
@@ -190,7 +200,6 @@ function createProductCard(product, index) {
     body.appendChild(ratingDiv);
   }
 
-  // Popularity (if available)
   if (product.review_count) {
     const popDiv = document.createElement("div");
     popDiv.className = "nova-card-popularity";
@@ -198,7 +207,6 @@ function createProductCard(product, index) {
     body.appendChild(popDiv);
   }
 
-  // Price (if available)
   if (product.price) {
     const priceDiv = document.createElement("div");
     priceDiv.className = "nova-card-price";
@@ -206,7 +214,6 @@ function createProductCard(product, index) {
     body.appendChild(priceDiv);
   }
 
-  // Actions
   const actionsDiv = document.createElement("div");
   actionsDiv.className = "nova-card-actions";
 
@@ -227,7 +234,6 @@ function createProductCard(product, index) {
 
   body.appendChild(actionsDiv);
   card.appendChild(body);
-
   return card;
 }
 
@@ -240,11 +246,8 @@ function renderStars(rating) {
 }
 
 // ---------------------------------------------------------------------------
-// Try-On
+// Try-On — mirrors content.js performTryOn() using identical ApiClient calls
 // ---------------------------------------------------------------------------
-
-let tryOnTimerInterval = null;
-let tryOnStartTime = 0;
 
 function withTimeout(promise, ms) {
   return Promise.race([
@@ -282,7 +285,7 @@ function updateTryOnStatus(step, message) {
   if (statusEl) statusEl.textContent = message;
 }
 
-// Shared helper: log backend debug steps to browser console
+// Same logDebugSteps as content.js
 function logDebugSteps(debug) {
   if (!debug || !debug.steps) return;
   const S = "background:#FF9900;color:#000;font-weight:bold;padding:2px 6px;border-radius:3px;";
@@ -315,6 +318,20 @@ function logDebugSteps(debug) {
   );
 }
 
+// Same storeDebugImages as content.js
+function storeDebugImages(bodyPhotoBase64, garmentBase64, debugInfo) {
+  const userPhoto = bodyPhotoBase64.startsWith("data:") ? bodyPhotoBase64 : "data:image/jpeg;base64," + bodyPhotoBase64;
+  const garmentPhoto = garmentBase64.startsWith("data:") ? garmentBase64 : "data:image/jpeg;base64," + garmentBase64;
+  chrome.storage.local.set({
+    tryOnDebug: {
+      userPhoto,
+      garmentPhoto,
+      garmentImageUsed: debugInfo.garmentImageUsed || "original",
+      timestamp: Date.now(),
+    }
+  });
+}
+
 async function handleTryOn(index) {
   const card = document.querySelectorAll(".nova-card")[index];
   if (!card) return;
@@ -328,10 +345,10 @@ async function handleTryOn(index) {
   }
 
   try {
-    // Step 1: Get user's body photo
+    // Step 1: Get user's body photo — same as content.js
     updateTryOnStatus(1, "Loading your photo...");
     const photos = await withTimeout(
-      sendMessage({ type: "GET_USER_PHOTOS" }),
+      ApiClient._sendMessage({ type: "GET_USER_PHOTOS" }),
       5000
     );
 
@@ -345,10 +362,10 @@ async function handleTryOn(index) {
     showTryOnModal();
     startTryOnTimer();
 
-    // Step 2: Fetch product image as base64
+    // Step 2: Fetch product image as base64 — same as content.js fetchImageAsBase64
     updateTryOnStatus(2, "Fetching product image...");
     const garmentBase64 = await withTimeout(
-      sendMessage({ type: "PROXY_IMAGE", url: product.image_url }),
+      ApiClient._sendMessage({ type: "PROXY_IMAGE", url: product.image_url }),
       15000
     );
 
@@ -356,29 +373,60 @@ async function handleTryOn(index) {
       throw new Error("Failed to fetch product image");
     }
 
-    // Step 3: Call unified try-on pipeline (backend does all 5 steps)
-    updateTryOnStatus(3, "AI pipeline running (5 steps)...");
-    const result = await withTimeout(
-      sendMessage({
-        type: "TRY_ON",
-        bodyImageBase64: photos.bodyPhoto,
-        garmentImageBase64: garmentBase64,
-        mergeStyle: "SEAMLESS",
-      }),
+    // Step 3: Analyze product — same as content.js ApiClient.analyzeProduct()
+    updateTryOnStatus(3, "Analyzing product...");
+    let analysisResult = null;
+    try {
+      analysisResult = await withTimeout(
+        ApiClient.analyzeProduct(garmentBase64, product.title || "", ""),
+        15000
+      );
+      console.log("[SmartSearch] Product analysis:", JSON.stringify(analysisResult));
+    } catch (err) {
+      console.warn("[SmartSearch] Product analysis failed, proceeding without garmentClass:", err.message);
+    }
+
+    // Step 4: Call try-on pipeline — identical to content.js ApiClient.tryOn()
+    updateTryOnStatus(4, "AI pipeline running (5 steps)...");
+    console.log(`[SmartSearch] Try-on params — poseIdx: ${currentPoseIndex}, framing: ${currentFraming}, garmentClass: ${analysisResult ? analysisResult.garmentClass : 'null'}`);
+
+    const response = await withTimeout(
+      ApiClient.tryOn(
+        null,                                              // bodyImage = null → backend fetches from S3
+        garmentBase64,                                     // garment image
+        analysisResult ? analysisResult.garmentClass : null, // garmentClass from analysis
+        "SEAMLESS",                                        // mergeStyle
+        currentFraming,                                    // framing from side panel
+        currentPoseIndex                                   // poseIndex from side panel
+      ),
       180000
     );
 
-    // Log all backend pipeline steps to console
-    if (result && result.debug) {
-      logDebugSteps(result.debug);
-    }
+    const resultImage = response.resultImage;
+    const debugInfo = response.debug;
+
+    // Log all backend pipeline steps — same as content.js
+    logDebugSteps(debugInfo);
 
     stopTryOnTimer();
 
-    if (result && result.resultImage) {
-      showTryOnResult(result.resultImage, product.title, photos.bodyPhoto, garmentBase64, result.debug);
+    if (resultImage) {
+      // Store debug images for side panel — same as content.js
+      if (debugInfo) {
+        let debugBodyPhoto = photos.bodyPhoto;
+        try {
+          const allPhotos = await ApiClient._sendMessage({
+            type: "API_CALL", endpoint: "/api/profile/photos/all", method: "GET", data: {}
+          });
+          if (allPhotos.generated && allPhotos.generated[currentPoseIndex]) {
+            debugBodyPhoto = allPhotos.generated[currentPoseIndex];
+          }
+        } catch (_) {}
+        storeDebugImages(debugBodyPhoto, garmentBase64, debugInfo);
+      }
+      showTryOnResult(resultImage, product);
     } else {
-      throw new Error(result?.error || "Try-on failed — no result image returned");
+      throw new Error(response?.error || "Try-on failed — no result image returned");
     }
   } catch (err) {
     stopTryOnTimer();
@@ -396,7 +444,6 @@ async function handleTryOn(index) {
 // ---------------------------------------------------------------------------
 // Try-On Modal
 // ---------------------------------------------------------------------------
-
 function showTryOnModal() {
   const modal = document.getElementById("tryOnModal");
   const body = document.getElementById("tryOnModalBody");
@@ -429,94 +476,56 @@ function showTryOnModal() {
   body.appendChild(loadingDiv);
 }
 
-function showTryOnResult(base64Image, title, bodyPhotoBase64, garmentBase64, debug) {
+function showTryOnResult(base64Image, product) {
   const body = document.getElementById("tryOnModalBody");
   body.innerHTML = "";
+  const title = product.title || "";
 
-  // Debug panel: show images sent to Gemini
-  if (bodyPhotoBase64 && garmentBase64) {
-    const debugPanel = document.createElement("div");
-    debugPanel.className = "nova-tryon-debug-panel";
-
-    const debugTitle = document.createElement("div");
-    debugTitle.className = "nova-tryon-debug-title";
-    debugTitle.textContent = "Images sent to Gemini 2.5 Flash";
-    debugPanel.appendChild(debugTitle);
-
-    const imagesRow = document.createElement("div");
-    imagesRow.className = "nova-tryon-debug-images";
-
-    // User photo
-    const userWrap = document.createElement("div");
-    userWrap.className = "nova-tryon-debug-img-wrap";
-    const userImg = document.createElement("img");
-    userImg.src = bodyPhotoBase64.startsWith("data:") ? bodyPhotoBase64 : "data:image/jpeg;base64," + bodyPhotoBase64;
-    userImg.alt = "Your body";
-    userWrap.appendChild(userImg);
-    const userLabel = document.createElement("span");
-    userLabel.textContent = "Your Photo";
-    userWrap.appendChild(userLabel);
-    imagesRow.appendChild(userWrap);
-
-    // Arrow
-    const arrow1 = document.createElement("div");
-    arrow1.className = "nova-tryon-debug-arrow";
-    arrow1.textContent = "+";
-    imagesRow.appendChild(arrow1);
-
-    // Garment
-    const garmentWrap = document.createElement("div");
-    garmentWrap.className = "nova-tryon-debug-img-wrap";
-    const garmentImg = document.createElement("img");
-    garmentImg.src = garmentBase64.startsWith("data:") ? garmentBase64 : "data:image/jpeg;base64," + garmentBase64;
-    garmentImg.alt = "Garment";
-    garmentWrap.appendChild(garmentImg);
-    const garmentLabel = document.createElement("span");
-    const extracted = debug && debug.garmentImageUsed === "extracted";
-    garmentLabel.textContent = extracted ? "Garment (extracted)" : "Garment (original)";
-    garmentWrap.appendChild(garmentLabel);
-    imagesRow.appendChild(garmentWrap);
-
-    // Arrow
-    const arrow2 = document.createElement("div");
-    arrow2.className = "nova-tryon-debug-arrow";
-    arrow2.textContent = "=";
-    imagesRow.appendChild(arrow2);
-
-    debugPanel.appendChild(imagesRow);
-    body.appendChild(debugPanel);
-  }
-
+  // Result image
   const img = document.createElement("img");
   img.src = "data:image/png;base64," + base64Image;
   img.alt = "Try-on result for " + title;
   body.appendChild(img);
 
+  // Caption
   const caption = document.createElement("p");
   caption.style.cssText = "text-align:center; margin-top:12px; font-size:13px; color:#565959;";
   caption.textContent = title;
   body.appendChild(caption);
+
+  // Save to Favorites — same as content.js ApiClient.addFavorite()
+  const favDiv = document.createElement("div");
+  favDiv.style.cssText = "text-align:center; margin-top:10px;";
+  const favBtn = document.createElement("button");
+  favBtn.className = "nova-btn-favorite";
+  favBtn.innerHTML = "&#9825; Save to Favorites";
+  favBtn.addEventListener("click", async () => {
+    try {
+      // Extract ASIN from product_url (e.g. https://www.amazon.com/dp/B0123ABC)
+      const asinMatch = (product.product_url || "").match(/\/dp\/([A-Z0-9]{10})/);
+      const asin = asinMatch ? asinMatch[1] : product.asin || "";
+
+      await ApiClient.addFavorite({
+        asin,
+        productTitle: product.title || "",
+        productImage: product.image_url || "",
+        category: "",
+        garmentClass: "",
+        tryOnResultImage: base64Image,
+      });
+      favBtn.innerHTML = "&#9829; Saved!";
+      favBtn.classList.add("nova-btn-favorite--saved");
+      favBtn.disabled = true;
+    } catch (err) {
+      console.error("[SmartSearch] Failed to save favorite:", err);
+      alert("Failed to save: " + err.message);
+    }
+  });
+  favDiv.appendChild(favBtn);
+  body.appendChild(favDiv);
 }
 
 function closeTryOnModal() {
   stopTryOnTimer();
   document.getElementById("tryOnModal").hidden = true;
-}
-
-// ---------------------------------------------------------------------------
-// Messaging
-// ---------------------------------------------------------------------------
-
-function sendMessage(msg) {
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(msg, (response) => {
-      if (chrome.runtime.lastError) {
-        return reject(new Error(chrome.runtime.lastError.message));
-      }
-      if (response && response.error) {
-        return reject(new Error(response.error));
-      }
-      resolve(response?.data || response);
-    });
-  });
 }

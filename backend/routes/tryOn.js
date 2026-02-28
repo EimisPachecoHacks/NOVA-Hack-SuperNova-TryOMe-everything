@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { virtualTryOn: novaVirtualTryOn } = require("../services/novaCanvas");
-const { virtualTryOn: geminiVirtualTryOn, extractGarment, buildSmartPrompt } = require("../services/gemini");
+const { virtualTryOn: geminiVirtualTryOn, virtualTryOnOutfit: geminiOutfitTryOn, extractGarment, buildSmartPrompt } = require("../services/gemini");
 const { analyzeProduct, classifyOutfit, hasPersonInImage } = require("../services/novaLite");
 const { optionalAuth } = require("../middleware/auth");
 const { getProfile } = require("../services/dynamodb");
@@ -32,7 +32,7 @@ async function fetchPhotoFromS3(key) {
 
 router.post("/", optionalAuth, async (req, res, next) => {
   try {
-    let { sourceImage, referenceImage, garmentClass, mergeStyle, framing, poseIndex } = req.body;
+    let { sourceImage, referenceImage, garmentClass, mergeStyle, framing, poseIndex, quickMode } = req.body;
 
     // If authenticated and no sourceImage provided, fetch from S3
     if (!sourceImage && req.userId) {
@@ -69,11 +69,25 @@ router.post("/", optionalAuth, async (req, res, next) => {
     console.log(`\x1b[1m\x1b[33m╚══════════════════════════════════════════════════════╝\x1b[0m`);
     console.log(`\x1b[36m  provider:\x1b[0m        \x1b[1m${provider}\x1b[0m`);
     console.log(`\x1b[36m  authenticated:\x1b[0m   ${!!req.userId}`);
+    console.log(`\x1b[36m  quickMode:\x1b[0m       \x1b[1m${!!quickMode}\x1b[0m`);
     console.log(`\x1b[36m  sourceImage:\x1b[0m     ${sourceImage ? sourceImage.length : 0} chars`);
     console.log(`\x1b[36m  referenceImage:\x1b[0m  ${referenceImage ? referenceImage.length : 0} chars`);
     console.log(`\x1b[36m  garmentClass:\x1b[0m    \x1b[1m${garmentClass || "(will detect)"}\x1b[0m`);
     console.log(`\x1b[36m  framing:\x1b[0m         \x1b[1m${framing || "full"}\x1b[0m`);
     console.log(`\x1b[36m  poseIndex:\x1b[0m       \x1b[1m${poseIndex}\x1b[0m`);
+
+    let garmentImageForTryOn = referenceImage;
+    let garmentImageUsed = "original";
+    let outfitInfo = { currentType: "UPPER_LOWER" };
+
+    if (quickMode && garmentClass) {
+      // ═══════════════════════════════════════════════════
+      // QUICK MODE — skip steps 1-4, jump straight to generation
+      // Used for chained try-on calls where garmentClass is already known
+      // ═══════════════════════════════════════════════════
+      console.log(`\n\x1b[1m\x1b[36m⚡ QUICK MODE — skipping steps 1-4 (garmentClass: ${garmentClass})\x1b[0m`);
+      debugSteps.push({ step: "1-4", name: "SKIPPED (quickMode)", model: "N/A", time: "0s", result: { quickMode: true, garmentClass } });
+    } else {
 
     // ═══════════════════════════════════════════════════
     // STEP 1: PRODUCT ANALYSIS (Nova 2 Lite via Bedrock)
@@ -134,8 +148,6 @@ router.post("/", optionalAuth, async (req, res, next) => {
     // ═══════════════════════════════════════════════════
     // STEP 2.1: GARMENT EXTRACTION (Gemini 2.5 Flash) [conditional]
     // ═══════════════════════════════════════════════════
-    let garmentImageForTryOn = referenceImage;
-    let garmentImageUsed = "original";
     if (personResult.hasPerson) {
       try {
         console.log(`\n\x1b[1m\x1b[35m▶ STEP 2.1: GARMENT EXTRACTION [Gemini 2.5 Flash Image]\x1b[0m`);
@@ -163,7 +175,6 @@ router.post("/", optionalAuth, async (req, res, next) => {
     // ═══════════════════════════════════════════════════
     // STEP 3: OUTFIT CLASSIFICATION (Nova 2 Lite via Bedrock)
     // ═══════════════════════════════════════════════════
-    let outfitInfo = null;
     try {
       console.log(`\n\x1b[1m\x1b[35m▶ STEP 3: OUTFIT CLASSIFICATION [Nova 2 Lite via Bedrock]\x1b[0m`);
       console.log(`\x1b[90m  ℹ Classify what the user is currently wearing (top+bottom, dress, outerwear) to handle outfit conflicts\x1b[0m`);
@@ -181,6 +192,8 @@ router.post("/", optionalAuth, async (req, res, next) => {
       outfitInfo = { currentType: "UPPER_LOWER" };
       debugSteps.push({ step: "3", name: "OUTFIT CLASSIFICATION", model: "Nova 2 Lite via Bedrock", time: "0s", result: { error: err.message, fallback: outfitInfo } });
     }
+
+    } // end of non-quickMode block
 
     // ═══════════════════════════════════════════════════
     // STEP 4: CONFLICT MATRIX (buildSmartPrompt)
@@ -235,6 +248,70 @@ router.post("/", optionalAuth, async (req, res, next) => {
         totalTime: totalTime + "s",
       },
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /outfit — Multi-garment try-on in a single Gemini call.
+ * Body: { garments: [{ imageBase64, garmentClass, label }], framing, poseIndex }
+ */
+router.post("/outfit", optionalAuth, async (req, res, next) => {
+  try {
+    let { sourceImage, garments, framing, poseIndex } = req.body;
+
+    if (!garments || !garments.length) {
+      return res.status(400).json({ error: "garments array is required" });
+    }
+
+    // If no sourceImage, fetch from S3
+    if (!sourceImage && req.userId) {
+      const profile = await getProfile(req.userId);
+      if (profile) {
+        const idx = typeof poseIndex === "number" ? poseIndex : 0;
+        if (profile.generatedPhotoKeys && profile.generatedPhotoKeys[idx]) {
+          sourceImage = await fetchPhotoFromS3(profile.generatedPhotoKeys[idx]);
+        } else if (profile.bodyPhotoKey) {
+          sourceImage = await fetchPhotoFromS3(profile.bodyPhotoKey);
+        }
+      }
+    }
+
+    if (!sourceImage) {
+      return res.status(400).json({ error: "sourceImage is required (or be authenticated with photos)" });
+    }
+
+    // Strip data URI prefix
+    if (sourceImage.startsWith("data:")) {
+      sourceImage = sourceImage.split(",")[1];
+    }
+    garments.forEach((g) => {
+      if (g.imageBase64 && g.imageBase64.startsWith("data:")) {
+        g.imageBase64 = g.imageBase64.split(",")[1];
+      }
+    });
+
+    const startTime = Date.now();
+
+    console.log(`\n\x1b[1m\x1b[33m╔══════════════════════════════════════════════════════╗\x1b[0m`);
+    console.log(`\x1b[1m\x1b[33m║        🔥 OUTFIT TRY-ON REQUEST (SINGLE CALL) 🔥     ║\x1b[0m`);
+    console.log(`\x1b[1m\x1b[33m╚══════════════════════════════════════════════════════╝\x1b[0m`);
+    console.log(`\x1b[36m  garments:\x1b[0m        \x1b[1m${garments.length}\x1b[0m`);
+    garments.forEach((g, i) => {
+      console.log(`\x1b[36m    [${i}]:\x1b[0m ${g.garmentClass} (${g.label}) — ${g.imageBase64?.length || 0} chars`);
+    });
+    console.log(`\x1b[36m  sourceImage:\x1b[0m     ${sourceImage.length} chars`);
+    console.log(`\x1b[36m  framing:\x1b[0m         \x1b[1m${framing || "full"}\x1b[0m`);
+
+    const resultImage = await geminiOutfitTryOn(sourceImage, garments, framing);
+
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`\n\x1b[1m\x1b[32m╔══════════════════════════════════════════════════════╗\x1b[0m`);
+    console.log(`\x1b[1m\x1b[32m║      ✅ OUTFIT TRY-ON COMPLETE — ${totalTime}s total            ║\x1b[0m`);
+    console.log(`\x1b[1m\x1b[32m╚══════════════════════════════════════════════════════╝\x1b[0m\n`);
+
+    res.json({ resultImage, totalTime: totalTime + "s" });
   } catch (error) {
     next(error);
   }

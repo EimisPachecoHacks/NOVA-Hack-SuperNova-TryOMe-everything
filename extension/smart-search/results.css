@@ -416,6 +416,32 @@ body {
   flex-shrink: 0;
 }
 
+/* ---------------------------------------------------------------------------
+   Save to Favorites Button
+   --------------------------------------------------------------------------- */
+.nova-btn-favorite {
+  border: 1px solid #FF9900;
+  background: transparent;
+  color: #FF9900;
+  border-radius: 8px;
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.nova-btn-favorite:hover {
+  background: #FF9900;
+  color: #fff;
+}
+
+.nova-btn-favorite--saved {
+  background: #FF9900;
+  color: #fff;
+  cursor: default;
+}
+
 /* Responsive */
 @media (max-width: 600px) {
   .nova-grid {

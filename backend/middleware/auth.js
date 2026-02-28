@@ -63,8 +63,11 @@ function optionalAuth(req, res, next) {
     if (!err && decoded) {
       req.userId = decoded.sub;
       req.userEmail = decoded.email;
+      return next();
     }
-    next();
+    // Token was provided but is expired/invalid → return 401 so client can refresh
+    console.error("[auth] optionalAuth token expired/invalid:", err?.message);
+    return res.status(401).json({ error: "Token expired" });
   });
 }
 

@@ -1,25 +1,18 @@
 const express = require("express");
 const router = express.Router();
-const { generateVideo: novaGenerateVideo, getVideoStatus: novaGetVideoStatus } = require("../services/novaReel");
-const { generateVideo: veoGenerateVideo, getVideoStatus: veoGetVideoStatus } = require("../services/veo");
+const { generateVideo: grokGenerateVideo, getVideoStatus: grokGetVideoStatus } = require("../services/grok");
 
 router.post("/", async (req, res, next) => {
   try {
-    const { image, prompt, provider: reqProvider } = req.body;
+    const { image, prompt } = req.body;
     if (!image) {
       return res.status(400).json({ error: "image is required" });
     }
 
-    const provider = reqProvider || process.env.VIDEO_PROVIDER || "veo";
-    console.log(`[video] Starting video generation job - provider: ${provider}`);
+    console.log("[video] Starting video generation job - provider: grok");
 
-    if (provider === "veo" && process.env.GEMINI_API_KEY) {
-      const result = await veoGenerateVideo(image, prompt);
-      res.json({ jobId: result.operationName, provider: "veo" });
-    } else {
-      const jobId = await novaGenerateVideo(image, prompt);
-      res.json({ jobId, provider: "nova" });
-    }
+    const result = await grokGenerateVideo(image, prompt);
+    res.json({ jobId: result.requestId, provider: "grok" });
   } catch (error) {
     next(error);
   }
@@ -28,15 +21,9 @@ router.post("/", async (req, res, next) => {
 router.get("/:jobId", async (req, res, next) => {
   try {
     const jobId = decodeURIComponent(req.params.jobId);
-    const provider = req.query.provider || "veo";
-    console.log(`[video] Checking status for job: ${jobId}, provider: ${provider}`);
+    console.log(`[video] Checking status for job: ${jobId}, provider: grok`);
 
-    let status;
-    if (provider === "veo") {
-      status = await veoGetVideoStatus(jobId);
-    } else {
-      status = await novaGetVideoStatus(jobId);
-    }
+    const status = await grokGetVideoStatus(jobId);
     res.json(status);
   } catch (error) {
     next(error);

@@ -307,48 +307,40 @@
           <button class="btn btn-primary btn-full btn-small" id="editSaveInfoBtn">Save Info</button>
         </div>
 
-        <!-- Body Photo Section -->
+        <!-- Original Photos Section (5 photos: 3 body + 2 face) -->
         <div class="edit-section">
-          <h3 class="edit-section-title">Body Photo</h3>
-          <div class="edit-photo-row">
-            <div class="edit-photo-current">
-              <img id="editBodyCurrentImg" alt="Current body photo">
+          <h3 class="edit-section-title">Your Original Photos</h3>
+          <p class="edit-photo-hint" style="margin-bottom:8px;">Click "Change" on any photo to replace it. 3 full-body + 2 face close-ups.</p>
+          <div class="edit-originals-grid" id="editOriginalsGrid">
+            <div class="edit-original-item" data-index="0">
+              <img class="edit-original-img" id="editOrigImg0" alt="Body 1">
+              <span class="edit-original-label">Body 1</span>
+              <button class="btn btn-secondary btn-small edit-original-change-btn" data-index="0">Change</button>
             </div>
-            <div class="edit-photo-actions">
-              <p class="edit-photo-hint">Stand straight, good lighting, full body visible</p>
-              <div class="upload-area upload-area-compact" id="editBodyUploadArea">
-                <input type="file" id="editBodyFileInput" accept="image/jpeg,image/png,image/webp" hidden>
-                <button class="btn btn-secondary btn-small" id="editBodyUploadBtn">Change Photo</button>
-              </div>
-              <div class="upload-preview" id="editBodyPreview" hidden>
-                <img id="editBodyPreviewImg" alt="New body photo">
-                <p class="preview-info" id="editBodyInfo"></p>
-              </div>
-              <button class="btn btn-primary btn-small" id="editBodySaveBtn" hidden>Upload</button>
+            <div class="edit-original-item" data-index="1">
+              <img class="edit-original-img" id="editOrigImg1" alt="Body 2">
+              <span class="edit-original-label">Body 2</span>
+              <button class="btn btn-secondary btn-small edit-original-change-btn" data-index="1">Change</button>
+            </div>
+            <div class="edit-original-item" data-index="2">
+              <img class="edit-original-img" id="editOrigImg2" alt="Body 3">
+              <span class="edit-original-label">Body 3</span>
+              <button class="btn btn-secondary btn-small edit-original-change-btn" data-index="2">Change</button>
+            </div>
+            <div class="edit-original-item" data-index="3">
+              <img class="edit-original-img" id="editOrigImg3" alt="Face 1">
+              <span class="edit-original-label">Face 1</span>
+              <button class="btn btn-secondary btn-small edit-original-change-btn" data-index="3">Change</button>
+            </div>
+            <div class="edit-original-item" data-index="4">
+              <img class="edit-original-img" id="editOrigImg4" alt="Face 2">
+              <span class="edit-original-label">Face 2</span>
+              <button class="btn btn-secondary btn-small edit-original-change-btn" data-index="4">Change</button>
             </div>
           </div>
-        </div>
-
-        <!-- Face Photo Section -->
-        <div class="edit-section">
-          <h3 class="edit-section-title">Face Photo</h3>
-          <div class="edit-photo-row">
-            <div class="edit-photo-current">
-              <img id="editFaceCurrentImg" alt="Current face photo">
-            </div>
-            <div class="edit-photo-actions">
-              <p class="edit-photo-hint">Clear face, front-facing, good lighting</p>
-              <div class="upload-area upload-area-compact" id="editFaceUploadArea">
-                <input type="file" id="editFaceFileInput" accept="image/jpeg,image/png,image/webp" hidden>
-                <button class="btn btn-secondary btn-small" id="editFaceUploadBtn">Change Photo</button>
-              </div>
-              <div class="upload-preview" id="editFacePreview" hidden>
-                <img id="editFacePreviewImg" alt="New face photo">
-                <p class="preview-info" id="editFaceInfo"></p>
-              </div>
-              <button class="btn btn-primary btn-small" id="editFaceSaveBtn" hidden>Upload</button>
-            </div>
-          </div>
+          <input type="file" id="editOriginalFileInput" accept="image/jpeg,image/png,image/webp" hidden>
+          <button class="btn btn-primary" id="editRegenAiBtn" style="width:100%;margin-top:12px;">Regenerate AI Photos</button>
+          <p class="edit-regen-status" id="editRegenStatus" hidden></p>
         </div>
       </div>
     </div>
@@ -410,7 +402,7 @@
       </div>
       <!-- Debug: Last Try-On Images -->
       <div class="debug-tryon-section" id="debugTryOnSection" hidden>
-        <h3 class="debug-tryon-title">Images sent to Gemini 2.5 Flash</h3>
+        <h3 class="debug-tryon-title">Images sent to the AI model</h3>
         <div class="debug-tryon-images">
           <div class="debug-tryon-thumb">
             <img id="debugUserPhoto" alt="Your photo">
@@ -424,15 +416,43 @@
         </div>
       </div>
 
-      <!-- Smart Search -->
+      <!-- Smart Search / Outfit Builder -->
       <div class="smart-search-section">
-        <h3 class="smart-search-title">&#10024; Smart Search</h3>
-        <p class="smart-search-desc">Search Amazon with AI — find products and try them on</p>
-        <div class="smart-search-row">
-          <input type="text" id="smartSearchInput" class="text-input" placeholder="e.g. black dresses for women" />
-          <button class="btn btn-primary btn-small" id="smartSearchBtn">Search</button>
+        <div class="search-mode-tabs">
+          <button class="search-mode-tab active" id="tabSmartSearch" data-mode="single">&#10024; Smart Search</button>
+          <button class="search-mode-tab" id="tabOutfitBuilder" data-mode="outfit">&#128090; Outfit Builder</button>
         </div>
-        <div class="smart-search-error" id="smartSearchError"></div>
+
+        <!-- Single Item Search -->
+        <div class="search-mode-panel" id="panelSmartSearch">
+          <p class="smart-search-desc">Search Amazon with AI — find products and try them on</p>
+          <div class="smart-search-row">
+            <input type="text" id="smartSearchInput" class="text-input" placeholder="e.g. black dresses for women" />
+            <button class="btn btn-primary btn-small" id="smartSearchBtn">Search</button>
+          </div>
+          <div class="smart-search-error" id="smartSearchError"></div>
+        </div>
+
+        <!-- Outfit Builder -->
+        <div class="search-mode-panel hidden" id="panelOutfitBuilder">
+          <p class="smart-search-desc">Build a complete outfit — AI finds matching top, bottom &amp; shoes</p>
+          <div class="outfit-slots">
+            <div class="outfit-slot">
+              <span class="outfit-slot-icon">&#128085;</span>
+              <input type="text" class="text-input outfit-input" id="outfitTop" placeholder="Top — e.g. white blouse" />
+            </div>
+            <div class="outfit-slot">
+              <span class="outfit-slot-icon">&#128086;</span>
+              <input type="text" class="text-input outfit-input" id="outfitBottom" placeholder="Bottom — e.g. blue jeans" />
+            </div>
+            <div class="outfit-slot">
+              <span class="outfit-slot-icon">&#128094;</span>
+              <input type="text" class="text-input outfit-input" id="outfitShoes" placeholder="Shoes — e.g. white sneakers (optional)" />
+            </div>
+          </div>
+          <button class="btn btn-primary btn-full" id="outfitBuildBtn">Build Outfit</button>
+          <div class="smart-search-error" id="outfitBuildError"></div>
+        </div>
       </div>
 
       <div class="profile-actions">

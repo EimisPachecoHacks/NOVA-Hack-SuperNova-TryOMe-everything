@@ -27,9 +27,25 @@ async function getAuthTokens() {
 }
 
 /**
+ * Ensure the auth token is fresh. If it expires within 5 minutes, refresh proactively.
+ */
+async function ensureFreshToken() {
+  const tokens = await getAuthTokens();
+  if (!tokens || !tokens.idToken) return;
+
+  // Refresh if token expires within 5 minutes (or expiresAt is missing)
+  const bufferMs = 5 * 60 * 1000;
+  if (tokens.expiresAt && Date.now() < tokens.expiresAt - bufferMs) return;
+
+  console.log("[bg] Token expiring soon — proactively refreshing");
+  await tryRefreshToken();
+}
+
+/**
  * Build headers including auth token if available.
  */
 async function buildHeaders() {
+  await ensureFreshToken();
   const headers = { "Content-Type": "application/json" };
   const tokens = await getAuthTokens();
   if (tokens && tokens.idToken) {
@@ -256,6 +272,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             referenceImage: message.garmentImageBase64,
             garmentClass: message.garmentClass,
             mergeStyle: message.mergeStyle || "SEAMLESS",
+            framing: message.framing || "full",
+            poseIndex: message.poseIndex ?? 0,
+            quickMode: message.quickMode || false,
+          });
+          sendResponse({ data: result });
+          break;
+        }
+
+        case "TRY_ON_OUTFIT": {
+          const result = await apiPost("/api/try-on/outfit", {
+            sourceImage: message.bodyImageBase64 || null,
+            garments: message.garments,
             framing: message.framing || "full",
             poseIndex: message.poseIndex ?? 0,
           });

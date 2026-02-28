@@ -62,7 +62,7 @@ router.get("/:asin", requireAuth, async (req, res, next) => {
 // POST /api/favorites
 router.post("/", requireAuth, async (req, res, next) => {
   try {
-    const { asin, productTitle, productImage, category, garmentClass, tryOnResultImage } = req.body;
+    const { asin, productTitle, productImage, category, garmentClass, tryOnResultImage, outfitId } = req.body;
 
     console.log(`[favorites] POST — asin=${asin}, hasProductImage=${!!productImage}, hasTryOnResultImage=${!!tryOnResultImage}, tryOnImageLength=${tryOnResultImage ? tryOnResultImage.length : 0}`);
 
@@ -91,6 +91,7 @@ router.post("/", requireAuth, async (req, res, next) => {
       category: category || "",
       garmentClass: garmentClass || "",
       tryOnResultKey,
+      outfitId: outfitId || "",
     });
 
     res.json(result);

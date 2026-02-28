@@ -289,6 +289,32 @@ select.text-input { cursor: pointer; }
 }
 .fav-card-remove:hover { color: #ff4757; }
 
+/* Outfit card (multi-item favorite) */
+.fav-outfit-card {
+  display: flex; gap: 10px; background: #fff; border: 2px solid #FF9900;
+  border-radius: 10px; padding: 10px; transition: box-shadow 0.2s;
+}
+.fav-outfit-card:hover { box-shadow: 0 2px 8px rgba(255,153,0,0.2); }
+.fav-outfit-images { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.fav-outfit-thumbs { display: flex; gap: 4px; }
+.fav-outfit-thumb {
+  width: 40px; height: 52px; object-fit: contain; border-radius: 4px;
+  background: #f7f7f7; cursor: pointer; border: 1px solid #e8e8e8;
+  transition: border-color 0.2s;
+}
+.fav-outfit-thumb:hover { border-color: #FF9900; }
+.fav-outfit-items { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.fav-outfit-link {
+  font-size: 11px; color: #FF9900; text-decoration: none; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fav-outfit-link:hover { text-decoration: underline; }
+.fav-outfit-remove {
+  background: none; border: none; color: #ccc; font-size: 18px; cursor: pointer;
+  padding: 0 4px; align-self: flex-start; transition: color 0.2s;
+}
+.fav-outfit-remove:hover { color: #ff4757; }
+
 .profile-actions {
   display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;
 }
@@ -318,7 +344,7 @@ select.text-input { cursor: pointer; }
 }
 .footer p { font-size: 10px; color: #999; font-weight: 500; }
 
-/* ---- Smart Search ---- */
+/* ---- Smart Search / Outfit Builder ---- */
 .smart-search-section {
   background: #fff;
   border-radius: 12px;
@@ -326,12 +352,21 @@ select.text-input { cursor: pointer; }
   padding: 14px;
   margin-bottom: 12px;
 }
-.smart-search-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #0f1111;
-  margin-bottom: 2px;
+.search-mode-tabs {
+  display: flex; gap: 0; margin-bottom: 10px;
+  border-bottom: 2px solid #e3e6ef;
 }
+.search-mode-tab {
+  flex: 1; background: none; border: none; padding: 8px 4px;
+  font-size: 12px; font-weight: 600; color: #888; cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -2px;
+  transition: color 0.2s, border-color 0.2s;
+}
+.search-mode-tab:hover { color: #232f3e; }
+.search-mode-tab.active {
+  color: #FF9900; border-bottom-color: #FF9900;
+}
+.search-mode-panel.hidden { display: none; }
 .smart-search-desc {
   font-size: 11px;
   color: #565959;
@@ -350,6 +385,20 @@ select.text-input { cursor: pointer; }
   margin-top: 6px;
 }
 .smart-search-error:empty { display: none; }
+
+/* Outfit Builder */
+.outfit-slots {
+  display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;
+}
+.outfit-slot {
+  display: flex; align-items: center; gap: 8px;
+}
+.outfit-slot-icon {
+  font-size: 18px; width: 24px; text-align: center; flex-shrink: 0;
+}
+.outfit-input {
+  flex: 1; font-size: 12px;
+}
 
 /* ---- Edit Profile View ---- */
 .edit-profile-header {
@@ -446,6 +495,59 @@ select.text-input { cursor: pointer; }
 .edit-photo-actions .upload-preview img {
   max-height: 80px;
   border-radius: 6px;
+}
+
+/* ---- Edit Original Photos Grid ---- */
+.edit-originals-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.edit-original-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.edit-original-img {
+  width: 100%;
+  aspect-ratio: 3/4;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid #e3e6ef;
+  background: #f5f6fa;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.edit-original-img:hover {
+  border-color: #FF9900;
+}
+
+.edit-original-label {
+  font-size: 9px;
+  color: #999;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.edit-original-change-btn {
+  font-size: 10px !important;
+  padding: 2px 8px !important;
+}
+
+.edit-original-item.uploading .edit-original-img {
+  opacity: 0.5;
+}
+
+.edit-regen-status {
+  font-size: 12px;
+  color: #FF9900;
+  font-weight: 600;
+  text-align: center;
+  margin-top: 8px;
 }
 
 /* ---- Debug Try-On Section ---- */

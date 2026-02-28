@@ -142,6 +142,22 @@
   margin-top: -8px;
 }
 
+.nova-tryon-loading-timer {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--nova-orange);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.nova-tryon-elapsed {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--nova-orange);
+  text-align: center;
+  padding: 4px 0;
+}
+
 /* ---------------------------------------------------------------------------
    Style Tips Section
    --------------------------------------------------------------------------- */
@@ -235,10 +251,17 @@
 /* ---------------------------------------------------------------------------
    Video Result
    --------------------------------------------------------------------------- */
+.nova-tryon-video-container {
+  width: 100%;
+  margin-top: 12px;
+  text-align: center;
+}
+
 .nova-tryon-video {
   width: 100%;
+  max-height: 480px;
+  object-fit: contain;
   border-radius: var(--nova-radius);
-  margin-top: 12px;
 }
 
 /* ---------------------------------------------------------------------------

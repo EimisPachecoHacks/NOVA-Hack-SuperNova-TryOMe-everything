@@ -301,6 +301,7 @@
           <div class="nova-tryon-spinner"></div>
           <div class="nova-tryon-loading-text">Generating your virtual try-on...</div>
           <div class="nova-tryon-loading-subtext">This may take a few seconds</div>
+          <div class="nova-tryon-loading-timer" id="tryOnElapsedTimer">0.0s</div>
         </div>
       </div>
     `;
@@ -419,6 +420,13 @@
       "color:#FF6600;font-weight:bold;font-size:14px;"
     );
 
+    // Start elapsed timer
+    const tryOnStart = Date.now();
+    const timerEl = body.querySelector("#tryOnElapsedTimer");
+    const timerInterval = setInterval(() => {
+      if (timerEl) timerEl.textContent = ((Date.now() - tryOnStart) / 1000).toFixed(1) + "s";
+    }, 100);
+
     try {
       let resultImage;
       let debugInfo = null;
@@ -455,15 +463,21 @@
 
       // If a newer try-on was started while we were waiting, discard this result
       if (thisRequestId !== tryOnRequestId) {
+        clearInterval(timerInterval);
         console.log(`[NovaTryOnMe] Discarding stale try-on result (req#${thisRequestId}, current is req#${tryOnRequestId})`);
         return;
       }
+
+      // Stop timer and compute elapsed
+      clearInterval(timerInterval);
+      const tryOnElapsed = ((Date.now() - tryOnStart) / 1000).toFixed(1);
 
       // Display the result (minimal overlay — controls are in the side panel)
       body.innerHTML = `
         <div class="nova-tryon-result">
           <img src="${base64ToDataUrl(resultImage)}" alt="Virtual try-on result" />
         </div>
+        <div class="nova-tryon-elapsed">Generated in ${tryOnElapsed}s</div>
         ${analysisResult && analysisResult.styleTips ? `
           <div class="nova-tryon-style-tips">
             <div class="nova-tryon-style-tips-title">Style Tips</div>
@@ -548,6 +562,7 @@
       );
 
     } catch (err) {
+      clearInterval(timerInterval);
       console.error("%c ✗ TRY-ON FAILED %c " + err.message, "background:#f44336;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px;", "color:#f44336;font-weight:bold;");
       body.innerHTML = `
         <div class="nova-tryon-error">
@@ -691,6 +706,7 @@
             <div class="nova-tryon-spinner"></div>
             <div class="nova-tryon-loading-text">Updating with new color...</div>
             <div class="nova-tryon-loading-subtext">This may take a few seconds</div>
+            <div class="nova-tryon-loading-timer" id="tryOnElapsedTimer">0.0s</div>
           </div>
         `;
         performTryOn(overlayCard, currentPhotos, currentIsCosmetic);
@@ -774,28 +790,28 @@
   // ---------------------------------------------------------------------------
   async function handleAnimate(body, resultImage, btn) {
     btn.disabled = true;
-    btn.textContent = "Generating video...";
+    btn.textContent = "Generating video... 0s";
+
+    const videoStart = Date.now();
+    const videoTimerInterval = setInterval(() => {
+      const elapsed = ((Date.now() - videoStart) / 1000).toFixed(0);
+      btn.textContent = `Generating video... ${elapsed}s`;
+    }, 1000);
 
     try {
-      // Crop to 1280x720 for Nova Reel requirements
-      const croppedImage = await cropToAspectRatio(resultImage, 1280, 720);
-
-      const prompt =
-        analysisResult && analysisResult.category
-          ? `A person wearing ${analysisResult.category} walks confidently, showing off the outfit naturally.`
-          : "A person walks confidently, showing off their outfit naturally.";
-
-      const response = await ApiClient.generateVideo(croppedImage, prompt);
+      const response = await ApiClient.generateVideo(resultImage);
       const jobId = response.jobId;
-      const videoProvider = response.provider || "veo";
-
-      btn.textContent = "Processing video...";
+      const videoProvider = response.provider || "grok";
 
       // Poll for video completion
       const videoResult = await pollVideoStatus(jobId, videoProvider);
 
+      clearInterval(videoTimerInterval);
+      const videoElapsed = ((Date.now() - videoStart) / 1000).toFixed(1);
+
       // Display the video
       const videoContainer = document.createElement("div");
+      videoContainer.className = "nova-tryon-video-container";
       const videoSrc = videoResult.videoBase64
         ? `data:${videoResult.videoMimeType || "video/mp4"};base64,${videoResult.videoBase64}`
         : videoResult.videoUrl;
@@ -804,11 +820,13 @@
           <source src="${videoSrc}" type="video/mp4" />
           Your browser does not support the video tag.
         </video>
+        <div class="nova-tryon-elapsed">Video generated in ${videoElapsed}s</div>
       `;
       body.appendChild(videoContainer);
       btn.textContent = "\u25B6 Animate";
       btn.disabled = false;
     } catch (err) {
+      clearInterval(videoTimerInterval);
       console.error("[NovaTryOnMe] Video generation failed:", err);
       btn.textContent = "\u25B6 Animate";
       btn.disabled = false;
