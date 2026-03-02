@@ -13,11 +13,12 @@ const authRoutes = require("./routes/auth");
 const profileRoutes = require("./routes/profile");
 const favoritesRoutes = require("./routes/favorites");
 const smartSearchRoutes = require("./routes/smartSearch");
+const accountRoutes = require("./routes/account");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CORS middleware - allow all origins (for chrome-extension:// during dev)
+// CORS middleware - allows chrome extensions and localhost
 app.use(corsMiddleware);
 
 // JSON body parser with 50MB limit (base64 images are large)
@@ -50,6 +51,7 @@ app.use("/api/cosmetics", cosmeticsRoutes);
 app.use("/api/video", videoRoutes);
 app.use("/api/image", imageRoutes);
 app.use("/api/smart-search", smartSearchRoutes);
+app.use("/api/account", accountRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -59,9 +61,16 @@ app.use((err, req, res, next) => {
   console.error("Stack:", err.stack);
 
   const statusCode = err.statusCode || 500;
-  res.status(statusCode).json({
-    error: err.message || "Internal server error"
-  });
+  // Pass through meaningful API errors (rate limits, quota, etc.) but hide stack traces
+  let clientMessage = "Internal server error";
+  if (statusCode < 500) {
+    clientMessage = err.message || "Internal server error";
+  } else if (err.message && (err.message.includes("RESOURCE_EXHAUSTED") || err.message.includes("quota"))) {
+    clientMessage = "AI service rate limit exceeded — please wait a moment and try again";
+  } else if (err.message && err.message.includes("429")) {
+    clientMessage = "Too many requests — please wait a moment and try again";
+  }
+  res.status(statusCode).json({ error: clientMessage });
 });
 
 app.listen(PORT, () => {

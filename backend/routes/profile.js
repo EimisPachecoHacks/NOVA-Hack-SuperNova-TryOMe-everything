@@ -34,7 +34,16 @@ router.get("/", requireAuth, async (req, res, next) => {
 // PUT /api/profile
 router.put("/", requireAuth, async (req, res, next) => {
   try {
-    const { firstName, lastName, birthday, country, city } = req.body;
+    const { birthday } = req.body;
+    // Strip HTML/script tags from text fields to prevent XSS
+    const stripTags = (s) => typeof s === "string" ? s.replace(/<[^>]*>/g, "").trim() : s;
+    const firstName = stripTags(req.body.firstName);
+    const lastName = stripTags(req.body.lastName);
+    const country = stripTags(req.body.country);
+    const city = stripTags(req.body.city);
+    const sex = req.body.sex === "male" || req.body.sex === "female" ? req.body.sex : undefined;
+    const clothesSize = stripTags(req.body.clothesSize);
+    const shoesSize = req.body.shoesSize ? String(req.body.shoesSize).trim() : undefined;
 
     // Calculate age from birthday
     let age = null;
@@ -55,6 +64,9 @@ router.put("/", requireAuth, async (req, res, next) => {
       lastName: lastName || existing.lastName,
       birthday: birthday || existing.birthday,
       age: age !== null ? age : existing.age,
+      sex: sex || existing.sex,
+      clothesSize: clothesSize || existing.clothesSize,
+      shoesSize: shoesSize || existing.shoesSize,
       country: country || existing.country,
       city: city || existing.city,
       email: req.userEmail || existing.email,
@@ -169,13 +181,21 @@ router.post("/generate-photos", requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: "userImages must be an array of 5 base64 strings (3 body + 2 face)" });
     }
 
+    // Validate that none of the 5 images are empty/null/undefined
+    for (let idx = 0; idx < 5; idx++) {
+      if (!userImages[idx] || typeof userImages[idx] !== "string" || userImages[idx].length < 100) {
+        const label = idx < 3 ? `body photo ${idx + 1}` : `face photo ${idx - 2}`;
+        return res.status(400).json({ error: `${label} is missing or invalid (image ${idx + 1} of 5)` });
+      }
+    }
+
     console.log("\x1b[1m\x1b[33m╔══════════════════════════════════════════════════════════╗");
     console.log("║     PROFILE PHOTO GENERATION — 3 Poses                  ║");
     console.log("╚══════════════════════════════════════════════════════════╝\x1b[0m");
 
     // Load pose templates from backend/assets/
     const assetsDir = path.join(__dirname, "..", "assets");
-    const poseTemplateFiles = ["pose_template1.png", "pose_template2.png", "pose_template3.png"];
+    const poseTemplateFiles = ["pose_template1.jpg", "pose_template2.jpg", "pose_template3.jpg"];
     const poseTemplates = poseTemplateFiles.map((file) => {
       const filepath = path.join(assetsDir, file);
       return fs.readFileSync(filepath).toString("base64");
@@ -200,22 +220,36 @@ router.post("/generate-photos", requireAuth, async (req, res, next) => {
       console.log(`\x1b[36m  Stored: ${key} (${(buffer.length / 1024).toFixed(0)} KB)\x1b[0m`);
     }
 
-    // Generate 3 posed profile photos
+    // Generate 3 posed profile photos (chained: pose 1 result anchors poses 2 & 3)
     const generatedPhotos = [];
     const generatedKeys = [];
+    let anchorImage = null; // First generated image becomes anchor for consistency
     const totalStart = Date.now();
+
+    // Text descriptions of each mannequin pose to help the model differentiate them
+    const poseDescriptions = [
+      "standing upright facing camera, hands resting at hip level, slight forward lean, weight on both feet",
+      "mid-stride walking pose, left leg forward and right leg back, arms relaxed at sides, body angled slightly to the right",
+      "standing facing camera, hands clasped together in front at waist level, legs slightly crossed, weight shifted to one side",
+    ];
 
     for (let i = 0; i < 3; i++) {
       const poseLabel = `POSE ${i + 1}/3`;
-      console.log(`\n\x1b[1m\x1b[35m▶ GENERATING ${poseLabel}\x1b[0m [gemini-3.1-flash-image-preview]`);
+      console.log(`\n\x1b[1m\x1b[35m▶ GENERATING ${poseLabel}\x1b[0m [gemini-3.1-flash-image-preview]${anchorImage ? " (with anchor)" : ""}`);
       const stepStart = Date.now();
 
       try {
-        const resultBase64 = await generateProfilePhoto(userImages, poseTemplates[i]);
+        const resultBase64 = await generateProfilePhoto(userImages, poseTemplates[i], "image/jpeg", anchorImage, poseDescriptions[i]);
         const elapsed = ((Date.now() - stepStart) / 1000).toFixed(1);
         console.log(`\x1b[32m  ✓ ${poseLabel} COMPLETE (${elapsed}s) — ${resultBase64.length} chars\x1b[0m`);
 
         generatedPhotos.push(resultBase64);
+
+        // Use first successful result as anchor for subsequent poses
+        if (!anchorImage) {
+          anchorImage = resultBase64;
+          console.log(`\x1b[36m  ↳ Set as identity anchor for remaining poses\x1b[0m`);
+        }
 
         // Store generated image in S3
         const key = `users/${req.userId}/generated_pose_${i}.jpg`;
@@ -333,24 +367,19 @@ router.get("/photos/all", requireAuth, async (req, res, next) => {
           chunks.push(chunk);
         }
         return Buffer.concat(chunks).toString("base64");
-      } catch (_) {
+      } catch (err) {
+        console.error(`[profile] Failed to fetch photo from S3: key=${key}, error=${err.message}`);
         return null;
       }
     };
 
-    const originals = [];
-    if (profile.originalPhotoKeys) {
-      for (const key of profile.originalPhotoKeys) {
-        originals.push(await fetchFromS3(key));
-      }
-    }
+    const originals = profile.originalPhotoKeys
+      ? await Promise.all(profile.originalPhotoKeys.map(fetchFromS3))
+      : [];
 
-    const generated = [];
-    if (profile.generatedPhotoKeys) {
-      for (const key of profile.generatedPhotoKeys) {
-        generated.push(await fetchFromS3(key));
-      }
-    }
+    const generated = profile.generatedPhotoKeys
+      ? await Promise.all(profile.generatedPhotoKeys.map(fetchFromS3))
+      : [];
 
     res.json({ originals, generated });
   } catch (error) {

@@ -24,10 +24,34 @@ let currentFraming = 'full';
 // Init
 // ---------------------------------------------------------------------------
 const params = new URLSearchParams(window.location.search);
-const query = params.get("q") || "";
+const rawQuery = params.get("q") || "";
+const clothesSize = params.get("clothesSize") || "";
+const shoesSize = params.get("shoesSize") || "";
+const userSex = params.get("sex") || "";
 
-document.getElementById("searchQuery").textContent = query
-  ? `Results for: "${query}"`
+// Build enriched query with user's size preferences
+let query = rawQuery;
+if (query) {
+  const sizeParts = [];
+  // Add sex-appropriate suffix if not already in query
+  if (userSex && !query.toLowerCase().includes("for men") && !query.toLowerCase().includes("for women")) {
+    sizeParts.push(userSex === "male" ? "for men" : "for women");
+  }
+  // Add clothes size for apparel queries (skip if query is clearly about shoes only)
+  const isShoeQuery = /\bshoes?\b|\bsneakers?\b|\bboots?\b|\bsandals?\b|\bheels?\b/i.test(query);
+  if (clothesSize && !isShoeQuery) {
+    sizeParts.push(`size ${clothesSize}`);
+  }
+  if (shoesSize && isShoeQuery) {
+    sizeParts.push(`size ${shoesSize}`);
+  }
+  if (sizeParts.length) {
+    query = `${rawQuery} ${sizeParts.join(" ")}`;
+  }
+}
+
+document.getElementById("searchQuery").textContent = rawQuery
+  ? `Results for: "${rawQuery}"`
   : "Smart Search";
 
 // Wire up non-inline event listeners

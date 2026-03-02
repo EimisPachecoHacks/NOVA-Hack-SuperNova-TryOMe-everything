@@ -86,6 +86,15 @@ class ApiClient {
     });
   }
 
+  static saveVideo(videoUrl, videoBase64, asin, productTitle, productImage) {
+    return ApiClient._sendMessage({
+      type: "API_CALL",
+      endpoint: "/api/video/save",
+      method: "POST",
+      data: { videoUrl, videoBase64, asin, productTitle, productImage },
+    });
+  }
+
   // --- Auth ---
 
   static getAuthStatus() {

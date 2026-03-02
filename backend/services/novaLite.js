@@ -25,9 +25,9 @@ Analyze the product image and information provided, then return a JSON response 
 }
 
 Classification rules:
-- Shirts, jackets, hoodies, blouses, tops, sweaters, coats → category: "clothing", garmentClass: "UPPER_BODY"
+- Shirts, jackets, hoodies, blouses, tops, sweaters, coats, crop tops → category: "clothing", garmentClass: "UPPER_BODY"
 - Pants, jeans, skirts, shorts, leggings → category: "clothing", garmentClass: "LOWER_BODY"
-- Dresses, jumpsuits, overalls, rompers → category: "clothing", garmentClass: "FULL_BODY"
+- Dresses, jumpsuits, overalls, rompers (SINGLE connected garment only) → category: "clothing", garmentClass: "FULL_BODY"
 - Shoes, boots, sandals, sneakers, heels → category: "footwear", garmentClass: "FOOTWEAR"
 - Lipstick, lip gloss, lip color → category: "cosmetics", cosmeticType: "lipstick"
 - Eye shadow, eye palette → category: "cosmetics", cosmeticType: "eyeshadow"
@@ -35,6 +35,11 @@ Classification rules:
 - Foundation, concealer, powder, BB cream → category: "cosmetics", cosmeticType: "foundation"
 - Jewelry, watches, bags, hats → category: "accessories" (not yet supported for try-on)
 - Everything else → category: "unsupported"
+
+CRITICAL classification rule for TWO-PIECE SETS:
+- If the image shows a MATCHING SET (top + bottom sold together as a pair), do NOT classify as FULL_BODY. Instead, classify based on the PRIMARY piece — usually UPPER_BODY if the title mentions "top", "shirt", "blouse", or LOWER_BODY if the title mentions "pants", "skirt", "shorts".
+- FULL_BODY should ONLY be used for SINGLE connected garments (dresses, jumpsuits, rompers, overalls) — NOT for two separate pieces shown together.
+- Always prioritize the product TITLE over the image when determining what the product is. If the title says "top" or "crop top", classify as UPPER_BODY even if the image shows matching pants.
 
 For styleTips, provide 2-3 short, helpful fashion tips about how to style or wear this product.
 
@@ -156,6 +161,7 @@ IMPORTANT: Return ONLY valid JSON, no additional text.`;
       return JSON.parse(objectMatch[0]);
     }
     // Fallback: assume separate top+bottom (safest default)
+    console.warn("[novaLite] classifyOutfit: could not parse response, defaulting to UPPER_LOWER");
     return { currentType: "UPPER_LOWER", upperDescription: null, lowerDescription: null };
   }
 }

@@ -28,11 +28,27 @@ const params = new URLSearchParams(window.location.search);
 const topQuery = params.get("top") || "";
 const bottomQuery = params.get("bottom") || "";
 const shoesQuery = params.get("shoes") || "";
+const clothesSizeParam = params.get("clothesSize") || "";
+const shoesSizeParam = params.get("shoesSize") || "";
+const userSexParam = params.get("sex") || "";
+const sexSuffix = userSexParam === "male" ? "for men" : "for women";
 
 // Wire event listeners (NO inline handlers)
 document.getElementById("tryOnBtn").addEventListener("click", handleTryOn);
 document.getElementById("favoriteBtn").addEventListener("click", handleSaveFavorite);
 document.getElementById("errorCloseBtn").addEventListener("click", () => window.close());
+
+// Clean up large base64 data on page unload
+window.addEventListener("unload", () => {
+  lastTryOnResultBase64 = null;
+  userPosePhoto = null;
+  selectedTop = null;
+  selectedBottom = null;
+  selectedShoes = null;
+  selectedItem = null;
+  if (timerInterval) clearInterval(timerInterval);
+  if (tryOnTimerInterval) clearInterval(tryOnTimerInterval);
+});
 
 // Start
 initWardrobe();
@@ -46,19 +62,22 @@ async function initWardrobe() {
   const promises = [];
 
   if (topQuery) {
-    promises.push(searchCategory("top", topQuery + " for women"));
+    const topSizeStr = clothesSizeParam ? ` size ${clothesSizeParam}` : "";
+    promises.push(searchCategory("top", `${topQuery} ${sexSuffix}${topSizeStr}`));
   } else {
     updateCategoryStatus("top", "Skipped");
   }
 
   if (bottomQuery) {
-    promises.push(searchCategory("bottom", bottomQuery + " for women"));
+    const bottomSizeStr = clothesSizeParam ? ` size ${clothesSizeParam}` : "";
+    promises.push(searchCategory("bottom", `${bottomQuery} ${sexSuffix}${bottomSizeStr}`));
   } else {
     updateCategoryStatus("bottom", "Skipped");
   }
 
   if (shoesQuery) {
-    promises.push(searchCategory("shoes", shoesQuery + " for women"));
+    const shoesSizeStr = shoesSizeParam ? ` size ${shoesSizeParam}` : "";
+    promises.push(searchCategory("shoes", `${shoesQuery} ${sexSuffix}${shoesSizeStr}`));
   } else {
     updateCategoryStatus("shoes", "Skipped");
   }
@@ -402,15 +421,24 @@ async function handleTryOn() {
 
     const fetchResults = await Promise.all(
       garmentItems.map(async (g) => {
-        const base64 = await sendMessage({ type: "PROXY_IMAGE", url: g.item.image_url });
+        // Prefer background-removed image (cleaner, no model) for better identity preservation
+        let base64 = null;
+        if (g.item._noBgImage) {
+          // _noBgImage is a data URL like "data:image/png;base64,..."
+          base64 = g.item._noBgImage.split(",")[1] || null;
+          console.log(`[Wardrobe] Using bg-removed image for ${g.label}: ${base64?.length || 0} chars`);
+        }
+        if (!base64) {
+          base64 = await sendMessage({ type: "PROXY_IMAGE", url: g.item.image_url });
+          console.log(`[Wardrobe] Fetched original image for ${g.label}: ${base64?.length || 0} chars`);
+        }
         if (!base64) throw new Error(`Failed to fetch ${g.label} image`);
-        console.log(`[Wardrobe] Fetched ${g.label}: ${base64.length} chars`);
         return { imageBase64: base64, garmentClass: g.garmentClass, label: g.label };
       })
     );
 
     // Single API call with all garments
-    updateTryOnStatus(`Trying on ${fetchResults.length} garments (single call)...`);
+    updateTryOnStatus(`Trying on ${fetchResults.length} garments...`);
     console.log(`[Wardrobe] Sending ${fetchResults.length} garments in a single TRY_ON_OUTFIT call`);
 
     const result = await sendMessage({
@@ -617,6 +645,11 @@ function resizeImageBase64(base64, minDim = 320, maxDim = 4096) {
       const dataUrl = canvas.toDataURL("image/png");
       const resized = dataUrl.split(",")[1];
       console.log(`[Wardrobe] Resized image: ${img.naturalWidth}x${img.naturalHeight} → ${width}x${height}`);
+
+      // Release canvas memory
+      canvas.width = 0;
+      canvas.height = 0;
+
       resolve(resized);
     };
     img.onerror = () => {

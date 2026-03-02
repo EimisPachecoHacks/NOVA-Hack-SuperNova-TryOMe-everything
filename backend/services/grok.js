@@ -19,9 +19,12 @@ const MODEL_ID = "xai/grok-imagine-video/image-to-video";
 
 /**
  * Generate video from image using Grok Imagine Video via fal.ai
+ * @param {string} imageBase64
+ * @param {string} [prompt]
+ * @param {string} [sex] - "male" or "female" for correct pronouns
  * Returns { requestId, provider } for polling
  */
-async function generateVideo(imageBase64, prompt) {
+async function generateVideo(imageBase64, prompt, sex) {
   console.log("[grok] generateVideo - starting video generation");
 
   ensureConfigured();
@@ -37,10 +40,12 @@ async function generateVideo(imageBase64, prompt) {
 
   const imageDataUrl = `data:image/jpeg;base64,${resizedBuffer.toString("base64")}`;
 
+  const pronoun = sex === "male" ? "He" : "She";
+  const possessive = sex === "male" ? "his" : "her";
   const defaultPrompt =
-    "Animate the person in the image as a professional fashion model presenting her outfit on a runway photoshoot. " +
-    "She confidently poses and slowly transitions between elegant poses — turning slightly, shifting her weight, " +
-    "tilting her head, and adjusting her posture to showcase the clothing from different angles. " +
+    `Animate the person in the image as a professional fashion model presenting ${possessive} outfit on a runway photoshoot. ` +
+    `${pronoun} confidently poses and slowly transitions between elegant poses — turning slightly, shifting weight, ` +
+    `tilting head, and adjusting posture to showcase the clothing from different angles. ` +
     "The movements should be smooth, natural, and graceful like a high-end fashion commercial. " +
     "CRITICAL: Keep the person's face, facial features, and body EXACTLY as shown in the image — do not alter or exaggerate any features. " +
     "Add stylish upbeat fashion runway background music with a modern, confident vibe.";

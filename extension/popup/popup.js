@@ -9,8 +9,6 @@ const DEFAULT_BACKEND_URL = 'http://localhost:3000';
 
 // State
 let pendingSignupEmail = '';
-let bodyPhotoBase64 = null;
-let facePhotoBase64 = null;
 let cachedProfile = null;
 
 // Multi-photo upload state for wizard step 2
@@ -43,6 +41,13 @@ function setLoading(btn, loading) {
     btn.classList.remove('loading');
     btn.disabled = false;
   }
+}
+
+function showToast(msg, duration = 3000) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => { toast.classList.remove('show'); }, duration);
 }
 
 function sendMsg(msg) {
@@ -224,6 +229,7 @@ async function handleVerify() {
         userEmail: email,
       });
       await chrome.storage.local.remove(['pendingEmail', 'pendingPassword']);
+      showToast('Account created successfully');
       // Go to wizard step 1
       showView('viewWizard1');
     }
@@ -253,6 +259,29 @@ async function handleResendCode() {
 async function handleSignOut() {
   await chrome.storage.local.remove(['authTokens', 'userEmail']);
   showView('viewSignIn');
+}
+
+async function handleDeleteAccount() {
+  const confirmed = confirm(
+    'Are you sure you want to delete your account?\n\n' +
+    'This will permanently remove all your data including photos, videos, and favorites. This action cannot be undone.'
+  );
+  if (!confirmed) return;
+
+  const btn = document.getElementById('deleteAccountBtn');
+  setLoading(btn, true);
+  try {
+    await sendMsg({
+      type: 'API_CALL', endpoint: '/api/account', method: 'DELETE', data: {}
+    });
+    await chrome.storage.local.clear();
+    showToast('Account deleted successfully');
+    showView('viewSignIn');
+  } catch (err) {
+    showToast('Failed to delete account: ' + err.message);
+  } finally {
+    setLoading(btn, false);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -297,12 +326,14 @@ async function showProfileView(profile) {
   const parts = [profile.city, profile.country].filter(Boolean);
   if (parts.length) locEl.textContent = parts.join(', ');
 
-  // Load favorites count
+  // Load favorites count + videos count in parallel
   try {
-    const favData = await sendMsg({
-      type: 'API_CALL', endpoint: '/api/favorites', method: 'GET', data: {}
-    });
-    document.getElementById('favoritesCount').textContent = favData.favorites?.length || 0;
+    const [favData, vidData] = await Promise.all([
+      sendMsg({ type: 'API_CALL', endpoint: '/api/favorites', method: 'GET', data: {} }).catch(() => null),
+      sendMsg({ type: 'API_CALL', endpoint: '/api/video/list', method: 'GET', data: {} }).catch(() => null),
+    ]);
+    document.getElementById('favoritesCount').textContent = favData?.favorites?.length || 0;
+    document.getElementById('videosCount').textContent = vidData?.videos?.length || 0;
   } catch (_) { /* ignore */ }
 
   // Load all photos (5 originals + 3 generated)
@@ -555,30 +586,28 @@ async function showFavoritesView() {
       const firstWithKey = items.find(i => i.tryOnResultKey);
       const tryOnImgId = firstWithKey ? `tryonImg_outfit_${firstWithKey.asin}` : '';
 
-      const productThumbs = items.map(i =>
-        `<img class="fav-outfit-thumb" src="${i.productImage || ''}" alt="${i.category}" title="${i.productTitle || i.category}" data-asin="${i.asin}">`
-      ).join('');
-
-      const itemLinks = items.map(i => {
+      const itemRows = items.map(i => {
         const shortTitle = (i.productTitle || i.category || 'Item').split(' ').slice(0, 4).join(' ');
-        return `<a class="fav-outfit-link" href="#" data-asin="${i.asin}">${shortTitle}</a>`;
+        return `<div class="fav-outfit-row" data-asin="${i.asin}">
+          <img class="fav-outfit-thumb" src="${i.productImage || ''}" alt="${i.category}" title="${i.productTitle || i.category}">
+          <a class="fav-outfit-link" href="#">${shortTitle}</a>
+        </div>`;
       }).join('');
 
       card.innerHTML = `
         <div class="fav-outfit-images">
           ${tryOnImgId ? `<img class="fav-card-img fav-card-tryon" id="${tryOnImgId}" src="" alt="Try-on" style="display:none">` : ''}
-          <div class="fav-outfit-thumbs">${productThumbs}</div>
         </div>
         <div class="fav-card-body">
           <div class="fav-card-title">Outfit (${items.length} items)</div>
-          <div class="fav-outfit-items">${itemLinks}</div>
+          <div class="fav-outfit-items">${itemRows}</div>
           <div class="fav-card-meta">${date}</div>
         </div>
         <button class="fav-outfit-remove" title="Remove outfit">&times;</button>
       `;
 
-      // Click product thumb → open that item on Amazon
-      card.querySelectorAll('.fav-outfit-thumb, .fav-outfit-link').forEach(el => {
+      // Click product row (thumb + link) → open that item on Amazon
+      card.querySelectorAll('.fav-outfit-row').forEach(el => {
         el.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -635,6 +664,90 @@ async function showFavoritesView() {
 }
 
 // ---------------------------------------------------------------------------
+// Videos View
+// ---------------------------------------------------------------------------
+async function showVideosView() {
+  showView('viewVideos');
+  const container = document.getElementById('videosListContainer');
+  container.innerHTML = '<div class="favorites-empty">Loading...</div>';
+
+  try {
+    const vidData = await sendMsg({
+      type: 'API_CALL', endpoint: '/api/video/list', method: 'GET', data: {}
+    });
+
+    const videos = vidData.videos || [];
+    if (!videos.length) {
+      container.innerHTML = '<div class="favorites-empty">No saved videos yet.<br>Use the "Save" button on generated videos to save them here.</div>';
+      return;
+    }
+
+    // Sort newest first
+    videos.sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
+
+    container.innerHTML = '<div class="videos-list" id="videosList"></div>';
+    const list = document.getElementById('videosList');
+
+    videos.forEach((video) => {
+      const card = document.createElement('div');
+      card.className = 'video-card';
+
+      const date = video.savedAt ? new Date(video.savedAt).toLocaleDateString() : '';
+      const title = video.productTitle || video.asin || 'Try-on video';
+      const shortTitle = title.split(' ').slice(0, 5).join(' ');
+
+      card.innerHTML = `
+        <div class="video-card-player">
+          ${video.videoUrl ? `<video class="video-card-video" controls preload="metadata"><source src="${video.videoUrl}" type="video/mp4"></video>` : '<div class="video-card-placeholder">Video unavailable</div>'}
+        </div>
+        <div class="video-card-body">
+          <div class="video-card-info">
+            ${video.productImage ? `<img class="video-card-product-img" src="${video.productImage}" alt="Product">` : ''}
+            <div>
+              <div class="video-card-title">${shortTitle}</div>
+              <div class="video-card-meta">${date}</div>
+            </div>
+          </div>
+          <div class="video-card-actions">
+            ${video.asin ? `<a class="video-card-link" href="#" data-asin="${video.asin}">View on Amazon</a>` : ''}
+            <button class="video-card-delete" title="Remove video" data-video-id="${video.videoId}">&times;</button>
+          </div>
+        </div>
+      `;
+
+      // Click Amazon link
+      const amazonLink = card.querySelector('.video-card-link');
+      if (amazonLink) {
+        amazonLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          chrome.tabs.create({ url: `https://www.amazon.com/dp/${amazonLink.dataset.asin}` });
+        });
+      }
+
+      // Delete video
+      card.querySelector('.video-card-delete').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const videoId = e.target.dataset.videoId;
+        try {
+          await sendMsg({ type: 'API_CALL', endpoint: `/api/video/${encodeURIComponent(videoId)}`, method: 'DELETE', data: {} });
+          card.remove();
+          if (list.querySelectorAll('.video-card').length === 0) {
+            container.innerHTML = '<div class="favorites-empty">No saved videos yet.<br>Use the "Save" button on generated videos to save them here.</div>';
+          }
+        } catch (err) {
+          console.error('[popup] Failed to remove video:', err);
+        }
+      });
+
+      list.appendChild(card);
+    });
+  } catch (err) {
+    console.error('[popup] Failed to load videos:', err);
+    container.innerHTML = '<div class="favorites-empty">Failed to load videos.</div>';
+  }
+}
+
+// ---------------------------------------------------------------------------
 
 let editOriginalReplaceIndex = null;
 
@@ -644,8 +757,11 @@ async function showEditProfile() {
     document.getElementById('editFirstName').value = cachedProfile.firstName || '';
     document.getElementById('editLastName').value = cachedProfile.lastName || '';
     document.getElementById('editBirthday').value = cachedProfile.birthday || '';
+    document.getElementById('editSex').value = cachedProfile.sex || '';
     document.getElementById('editCountry').value = cachedProfile.country || '';
     document.getElementById('editCity').value = cachedProfile.city || '';
+    document.getElementById('editClothesSize').value = cachedProfile.clothesSize || '';
+    document.getElementById('editShoesSize').value = cachedProfile.shoesSize || '';
     if (cachedProfile.birthday) {
       const age = calculateAge(cachedProfile.birthday);
       document.getElementById('editAgeDisplay').textContent = age > 0 ? `Age: ${age}` : '';
@@ -680,11 +796,14 @@ async function handleEditSaveInfo() {
   const firstName = document.getElementById('editFirstName').value.trim();
   const lastName = document.getElementById('editLastName').value.trim();
   const birthday = document.getElementById('editBirthday').value;
+  const sex = document.getElementById('editSex').value;
   const country = document.getElementById('editCountry').value;
   const city = document.getElementById('editCity').value.trim();
+  const clothesSize = document.getElementById('editClothesSize').value;
+  const shoesSize = document.getElementById('editShoesSize').value;
 
   if (!firstName || !lastName) {
-    alert('Please enter your first and last name.');
+    showToast('Please enter your first and last name.');
     return;
   }
 
@@ -692,12 +811,11 @@ async function handleEditSaveInfo() {
   try {
     await sendMsg({
       type: 'API_CALL', endpoint: '/api/profile', method: 'PUT',
-      data: { firstName, lastName, birthday, country, city }
+      data: { firstName, lastName, birthday, sex, country, city, clothesSize, shoesSize }
     });
-    btn.textContent = 'Saved!';
-    setTimeout(() => { btn.textContent = 'Save Info'; }, 1500);
+    showToast('Profile updated successfully');
   } catch (err) {
-    alert('Failed to save: ' + err.message);
+    showToast('Failed to save: ' + err.message);
   } finally {
     setLoading(btn, false);
   }
@@ -743,6 +861,7 @@ async function handleEditRegenAiPhotos() {
 
     statusEl.textContent = `Done! ${successCount}/3 photos generated in ${totalTime}s`;
     btn.textContent = 'Regenerate AI Photos';
+    showToast('Profile photos regenerated successfully');
     setTimeout(() => { statusEl.hidden = true; }, 5000);
   } catch (err) {
     statusEl.textContent = 'Failed: ' + err.message;
@@ -790,18 +909,21 @@ async function handleWizard1Next() {
   const firstName = document.getElementById('firstName').value.trim();
   const lastName = document.getElementById('lastName').value.trim();
   const birthday = document.getElementById('birthday').value;
+  const sex = document.getElementById('sex').value;
   const country = document.getElementById('country').value;
   const city = document.getElementById('city').value.trim();
+  const clothesSize = document.getElementById('clothesSize').value;
+  const shoesSize = document.getElementById('shoesSize').value;
 
-  if (!firstName || !lastName) {
-    alert('Please enter your first and last name.');
+  if (!firstName || !lastName || !birthday || !sex || !country || !city || !clothesSize || !shoesSize) {
+    showToast('Please fill in all fields.');
     return;
   }
 
   try {
     await sendMsg({
       type: 'API_CALL', endpoint: '/api/profile', method: 'PUT',
-      data: { firstName, lastName, birthday, country, city }
+      data: { firstName, lastName, birthday, sex, country, city, clothesSize, shoesSize }
     });
     // Open as a full tab for photo upload (popup closes when file dialogs open)
     openAsTab('wizard2');
@@ -1039,8 +1161,12 @@ async function handleSmartSearch() {
     return;
   }
 
-  // Open the results page in a new tab with the query
-  const resultsUrl = chrome.runtime.getURL('smart-search/results.html') + '?q=' + encodeURIComponent(query);
+  // Open the results page in a new tab with the query + user sizes
+  const searchParams = new URLSearchParams({ q: query });
+  if (cachedProfile?.clothesSize) searchParams.set('clothesSize', cachedProfile.clothesSize);
+  if (cachedProfile?.shoesSize) searchParams.set('shoesSize', cachedProfile.shoesSize);
+  if (cachedProfile?.sex) searchParams.set('sex', cachedProfile.sex);
+  const resultsUrl = chrome.runtime.getURL('smart-search/results.html') + '?' + searchParams.toString();
   chrome.tabs.create({ url: resultsUrl });
 }
 
@@ -1057,6 +1183,7 @@ async function init() {
   document.getElementById('goToSignIn').addEventListener('click', (e) => { e.preventDefault(); showView('viewSignIn'); });
   document.getElementById('resendCode').addEventListener('click', (e) => { e.preventDefault(); handleResendCode(); });
   document.getElementById('signOutBtn').addEventListener('click', handleSignOut);
+  document.getElementById('deleteAccountBtn').addEventListener('click', handleDeleteAccount);
 
   // Enter key on login/signup
   document.getElementById('loginPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') handleLogin(); });
@@ -1113,11 +1240,14 @@ async function init() {
       errorEl.textContent = 'Please describe at least a top or bottom';
       return;
     }
-    const params = new URLSearchParams();
-    if (top) params.set('top', top);
-    if (bottom) params.set('bottom', bottom);
-    if (shoes) params.set('shoes', shoes);
-    const url = chrome.runtime.getURL('outfit-builder/wardrobe.html') + '?' + params.toString();
+    const outfitParams = new URLSearchParams();
+    if (top) outfitParams.set('top', top);
+    if (bottom) outfitParams.set('bottom', bottom);
+    if (shoes) outfitParams.set('shoes', shoes);
+    if (cachedProfile?.clothesSize) outfitParams.set('clothesSize', cachedProfile.clothesSize);
+    if (cachedProfile?.shoesSize) outfitParams.set('shoesSize', cachedProfile.shoesSize);
+    if (cachedProfile?.sex) outfitParams.set('sex', cachedProfile.sex);
+    const url = chrome.runtime.getURL('outfit-builder/wardrobe.html') + '?' + outfitParams.toString();
     chrome.tabs.create({ url });
   });
 
@@ -1170,6 +1300,10 @@ async function init() {
   // Favorites click → show favorites view
   document.getElementById('profileFavorites').addEventListener('click', showFavoritesView);
   document.getElementById('favBackBtn').addEventListener('click', () => loadProfileAndRoute());
+
+  // Videos click → show videos view
+  document.getElementById('profileVideos').addEventListener('click', showVideosView);
+  document.getElementById('videosBackBtn').addEventListener('click', () => loadProfileAndRoute());
 
   // Backend URL
   const saveUrlBtn = document.getElementById('saveUrlBtn');

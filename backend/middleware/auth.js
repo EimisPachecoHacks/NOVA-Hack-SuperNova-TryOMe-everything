@@ -35,12 +35,12 @@ function requireAuth(req, res, next) {
     algorithms: ["RS256"],
     issuer: `https://cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`,
   }, (err, decoded) => {
-    if (err) {
-      console.error("[auth] Token verification failed:", err.message);
+    if (err || !decoded || !decoded.sub) {
+      console.error("[auth] Token verification failed:", err?.message || "missing sub claim");
       return res.status(401).json({ error: "Invalid or expired token" });
     }
     req.userId = decoded.sub;
-    req.userEmail = decoded.email;
+    req.userEmail = decoded.email || "";
     next();
   });
 }

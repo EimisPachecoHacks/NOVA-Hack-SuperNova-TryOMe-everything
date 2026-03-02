@@ -267,6 +267,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
 
         case "TRY_ON": {
+          console.log(`[background] TRY_ON — framing: "${message.framing}", poseIndex: ${message.poseIndex}, garmentClass: "${message.garmentClass}"`);
           const result = await apiPost("/api/try-on", {
             sourceImage: message.bodyImageBase64,
             referenceImage: message.garmentImageBase64,

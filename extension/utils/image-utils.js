@@ -1,71 +1,9 @@
 /**
  * NovaTryOnMe - Image Utility Functions
  *
- * Provides helpers for cropping, fetching, and converting images.
+ * Provides helpers for fetching and converting images.
  * All functions work with base64-encoded strings.
  */
-
-/**
- * Center-crop an image to a target aspect ratio, then resize to exact dimensions.
- * Useful for Nova Reel which requires exactly 1280x720.
- *
- * @param {string} base64 - base64-encoded image (with or without data: prefix)
- * @param {number} targetWidth - Desired output width in pixels
- * @param {number} targetHeight - Desired output height in pixels
- * @returns {Promise<string>} Cropped and resized image as base64 JPEG (no data: prefix)
- */
-async function cropToAspectRatio(base64, targetWidth, targetHeight) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const srcW = img.width;
-      const srcH = img.height;
-      const targetRatio = targetWidth / targetHeight;
-      const srcRatio = srcW / srcH;
-
-      let cropX = 0;
-      let cropY = 0;
-      let cropW = srcW;
-      let cropH = srcH;
-
-      if (srcRatio > targetRatio) {
-        // Source is wider than target ratio -> crop sides
-        cropW = Math.round(srcH * targetRatio);
-        cropX = Math.round((srcW - cropW) / 2);
-      } else {
-        // Source is taller than target ratio -> crop top/bottom
-        cropH = Math.round(srcW / targetRatio);
-        cropY = Math.round((srcH - cropH) / 2);
-      }
-
-      const canvas = document.createElement("canvas");
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(
-        img,
-        cropX,
-        cropY,
-        cropW,
-        cropH,
-        0,
-        0,
-        targetWidth,
-        targetHeight
-      );
-
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-      resolve(dataUrl.split(",")[1]);
-    };
-    img.onerror = () =>
-      reject(new Error("Failed to load image for cropping"));
-
-    img.src = base64.startsWith("data:")
-      ? base64
-      : `data:image/jpeg;base64,${base64}`;
-  });
-}
 
 /**
  * Fetch an image URL and convert it to a base64 string.

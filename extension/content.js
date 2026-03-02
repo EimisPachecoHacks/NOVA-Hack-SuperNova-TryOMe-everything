@@ -6,7 +6,7 @@
  *
  * Dependencies (loaded before this file via manifest content_scripts):
  *   - utils/amazon-scraper.js  -> scrapeProductData()
- *   - utils/image-utils.js     -> fetchImageAsBase64(), cropToAspectRatio(), base64ToDataUrl()
+ *   - utils/image-utils.js     -> fetchImageAsBase64(), base64ToDataUrl()
  *   - utils/api-client.js      -> ApiClient (static methods use message passing)
  */
 
@@ -336,6 +336,11 @@
       overlayCard.remove();
       overlayCard = null;
     }
+    // Clean up any open lightbox
+    const lightbox = document.getElementById("nova-tryon-lightbox");
+    if (lightbox) lightbox.remove();
+    // Clear debug images from storage to free memory
+    chrome.storage.local.remove(["tryOnDebug"]);
     if (disableToggle && tryOnEnabled) {
       tryOnEnabled = false;
       const btn = document.querySelector(".nova-tryon-btn");
@@ -445,7 +450,7 @@
         resultImage = response.resultImage;
       } else {
         // Send null as bodyImage so backend fetches the correct pose from S3 using poseIndex
-        console.log(`[NovaTryOnMe] Try-on params — poseIdx: ${currentPoseIdx}, framing: ${currentFraming}, garmentClass: ${analysisResult ? analysisResult.garmentClass : 'null'}`);
+        console.log(`[NovaTryOnMe] Try-on params — poseIdx: ${currentPoseIdx}, framing: "${currentFraming}" (type: ${typeof currentFraming}), garmentClass: ${analysisResult ? analysisResult.garmentClass : 'null'}`);
         const response = await ApiClient.tryOn(
           null,
           productImageBase64,
@@ -473,9 +478,10 @@
       const tryOnElapsed = ((Date.now() - tryOnStart) / 1000).toFixed(1);
 
       // Display the result (minimal overlay — controls are in the side panel)
+      const resultDataUrl = base64ToDataUrl(resultImage);
       body.innerHTML = `
         <div class="nova-tryon-result">
-          <img src="${base64ToDataUrl(resultImage)}" alt="Virtual try-on result" />
+          <img src="${resultDataUrl}" alt="Virtual try-on result" style="cursor:pointer;" title="Click to enlarge" />
         </div>
         <div class="nova-tryon-elapsed">Generated in ${tryOnElapsed}s</div>
         ${analysisResult && analysisResult.styleTips ? `
@@ -560,6 +566,12 @@
       animateBtn.addEventListener("click", () =>
         handleAnimate(body, resultImage, animateBtn)
       );
+
+      // Lightbox: click result image to enlarge
+      const resultImg = body.querySelector(".nova-tryon-result img");
+      if (resultImg) {
+        resultImg.addEventListener("click", () => openTryOnLightbox(resultDataUrl));
+      }
 
     } catch (err) {
       clearInterval(timerInterval);
@@ -786,7 +798,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Video Animation (Nova Reel)
+  // Video Animation (Grok Imagine Video)
   // ---------------------------------------------------------------------------
   async function handleAnimate(body, resultImage, btn) {
     btn.disabled = true;
@@ -820,8 +832,62 @@
           <source src="${videoSrc}" type="video/mp4" />
           Your browser does not support the video tag.
         </video>
-        <div class="nova-tryon-elapsed">Video generated in ${videoElapsed}s</div>
+        <div class="nova-tryon-video-actions">
+          <span class="nova-tryon-elapsed">Video generated in ${videoElapsed}s</span>
+          <div class="nova-tryon-video-btns">
+            <button class="nova-tryon-save-video-btn" title="Save to your account">Save</button>
+            <button class="nova-tryon-download-video-btn" title="Download to your computer">Download</button>
+          </div>
+        </div>
       `;
+
+      // Wire Save button (upload to S3)
+      const saveBtn = videoContainer.querySelector(".nova-tryon-save-video-btn");
+      saveBtn.addEventListener("click", async () => {
+        saveBtn.textContent = "Saving...";
+        saveBtn.disabled = true;
+        try {
+          const asin = productData?.asin || "";
+          await ApiClient.saveVideo(
+            videoResult.videoUrl || null,
+            videoResult.videoBase64 || null,
+            asin,
+            productData?.title || "",
+            productData?.imageUrl || ""
+          );
+          saveBtn.textContent = "Saved!";
+        } catch (err) {
+          console.error("[NovaTryOnMe] Failed to save video:", err);
+          saveBtn.textContent = "Failed";
+          setTimeout(() => { saveBtn.textContent = "Save"; saveBtn.disabled = false; }, 2000);
+        }
+      });
+
+      // Wire Download button (local download via blob to avoid cross-origin navigation)
+      const downloadBtn = videoContainer.querySelector(".nova-tryon-download-video-btn");
+      downloadBtn.addEventListener("click", async () => {
+        downloadBtn.textContent = "Downloading...";
+        downloadBtn.disabled = true;
+        try {
+          const resp = await fetch(videoSrc);
+          const blob = await resp.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = blobUrl;
+          a.download = "tryon-video-" + Date.now() + ".mp4";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(blobUrl);
+          downloadBtn.textContent = "Download";
+          downloadBtn.disabled = false;
+        } catch (err) {
+          console.error("[NovaTryOnMe] Download failed:", err);
+          downloadBtn.textContent = "Failed";
+          setTimeout(() => { downloadBtn.textContent = "Download"; downloadBtn.disabled = false; }, 2000);
+        }
+      });
+
       body.appendChild(videoContainer);
       btn.textContent = "\u25B6 Animate";
       btn.disabled = false;
@@ -861,6 +927,45 @@
     }
 
     throw new Error("Video generation timed out");
+  }
+
+  // ---------------------------------------------------------------------------
+  // Lightbox for try-on result image
+  // ---------------------------------------------------------------------------
+  function openTryOnLightbox(imageSrc) {
+    // Remove existing lightbox if any
+    const existing = document.getElementById("nova-tryon-lightbox");
+    if (existing) existing.remove();
+
+    const lightbox = document.createElement("div");
+    lightbox.id = "nova-tryon-lightbox";
+    lightbox.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;z-index:100000;display:flex;align-items:center;justify-content:center;";
+
+    lightbox.innerHTML = `
+      <div style="position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);" data-close="1"></div>
+      <div style="position:relative;max-width:90%;max-height:90%;">
+        <img src="${imageSrc}" style="max-width:100%;max-height:85vh;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.5);display:block;" alt="Try-on result full size" />
+        <button style="position:absolute;top:-12px;right:-12px;width:32px;height:32px;border-radius:50%;border:none;background:#fff;color:#333;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.3);" data-close="1">&times;</button>
+      </div>
+    `;
+
+    // Close on backdrop/button click
+    lightbox.addEventListener("click", (e) => {
+      if (e.target.dataset.close === "1" || e.target.closest("[data-close='1']")) {
+        lightbox.remove();
+      }
+    });
+
+    // Close on Escape
+    const escHandler = (e) => {
+      if (e.key === "Escape") {
+        lightbox.remove();
+        document.removeEventListener("keydown", escHandler);
+      }
+    };
+    document.addEventListener("keydown", escHandler);
+
+    document.body.appendChild(lightbox);
   }
 
   // ---------------------------------------------------------------------------

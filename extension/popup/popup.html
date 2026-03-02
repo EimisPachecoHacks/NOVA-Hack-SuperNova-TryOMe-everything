@@ -125,10 +125,20 @@
             <input type="text" id="lastName" class="text-input" placeholder="Doe">
           </div>
         </div>
-        <div class="form-group">
-          <label for="birthday">Birthday</label>
-          <input type="date" id="birthday" class="text-input">
-          <span class="age-display" id="ageDisplay"></span>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="birthday">Birthday</label>
+            <input type="date" id="birthday" class="text-input">
+            <span class="age-display" id="ageDisplay"></span>
+          </div>
+          <div class="form-group">
+            <label for="sex">Sex</label>
+            <select id="sex" class="text-input">
+              <option value="">Select...</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+            </select>
+          </div>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -153,6 +163,25 @@
           <div class="form-group">
             <label for="city">City</label>
             <input type="text" id="city" class="text-input" placeholder="Austin">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="clothesSize">Clothes Size</label>
+            <select id="clothesSize" class="text-input">
+              <option value="">Select...</option>
+              <option value="XS">XS</option>
+              <option value="S">S</option>
+              <option value="M">M</option>
+              <option value="L">L</option>
+              <option value="XL">XL</option>
+              <option value="XXL">XXL</option>
+              <option value="3XL">3XL</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="shoesSize">Shoes Size (US)</label>
+            <input type="number" id="shoesSize" class="text-input" placeholder="e.g. 9" min="1" max="20" step="0.5">
           </div>
         </div>
         <button class="btn btn-primary btn-full" id="wizard1Next">Next</button>
@@ -202,7 +231,7 @@
           </div>
         </div>
 
-        <p class="upload-hint">Use your most recent photos for better accuracy in try-on results. Different angles and lighting give the AI more to work with.</p>
+        <p class="upload-hint">Use your most recent photos where you are the only person in the picture, without glasses, hats, or anything that covers the face. Different angles and lighting give the AI more to work with for better try-on results.</p>
         <div class="wizard-nav">
           <button class="btn btn-secondary" id="wizard2Back">Back</button>
           <button class="btn btn-primary" id="wizard2Next" disabled>Generate My Profile</button>
@@ -274,10 +303,20 @@
               <input type="text" id="editLastName" class="text-input" placeholder="Doe">
             </div>
           </div>
-          <div class="form-group">
-            <label for="editBirthday">Birthday</label>
-            <input type="date" id="editBirthday" class="text-input">
-            <span class="age-display" id="editAgeDisplay"></span>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="editBirthday">Birthday</label>
+              <input type="date" id="editBirthday" class="text-input">
+              <span class="age-display" id="editAgeDisplay"></span>
+            </div>
+            <div class="form-group">
+              <label for="editSex">Sex</label>
+              <select id="editSex" class="text-input">
+                <option value="">Select...</option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+              </select>
+            </div>
           </div>
           <div class="form-row">
             <div class="form-group">
@@ -302,6 +341,25 @@
             <div class="form-group">
               <label for="editCity">City</label>
               <input type="text" id="editCity" class="text-input" placeholder="Austin">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="editClothesSize">Clothes Size</label>
+              <select id="editClothesSize" class="text-input">
+                <option value="">Select...</option>
+                <option value="XS">XS</option>
+                <option value="S">S</option>
+                <option value="M">M</option>
+                <option value="L">L</option>
+                <option value="XL">XL</option>
+                <option value="XXL">XXL</option>
+                <option value="3XL">3XL</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="editShoesSize">Shoes Size (US)</label>
+              <input type="number" id="editShoesSize" class="text-input" placeholder="e.g. 9" min="1" max="20" step="0.5">
             </div>
           </div>
           <button class="btn btn-primary btn-full btn-small" id="editSaveInfoBtn">Save Info</button>
@@ -395,9 +453,15 @@
           <div class="profile-detail" id="profileAge"></div>
           <div class="profile-detail" id="profileLocation"></div>
         </div>
-        <div class="profile-favorites" id="profileFavorites">
-          <span class="favorites-icon">&#9829;</span>
-          <span id="favoritesCount">0</span> favorites
+        <div class="profile-stats">
+          <div class="profile-stat" id="profileFavorites">
+            <span class="favorites-icon">&#9829;</span>
+            <span id="favoritesCount">0</span> favorites
+          </div>
+          <div class="profile-stat" id="profileVideos">
+            <span class="favorites-icon">&#9654;</span>
+            <span id="videosCount">0</span> videos
+          </div>
         </div>
       </div>
       <!-- Debug: Last Try-On Images -->
@@ -458,6 +522,7 @@
       <div class="profile-actions">
         <button class="btn btn-secondary btn-full" id="editProfileBtn">Edit Profile</button>
         <button class="btn btn-secondary btn-full btn-danger" id="signOutBtn">Sign Out</button>
+        <button class="btn btn-secondary btn-full btn-danger-destructive" id="deleteAccountBtn">Delete Account</button>
       </div>
 
       <details class="advanced-section">
@@ -488,6 +553,17 @@
       </div>
     </div>
 
+    <!-- View: My Videos -->
+    <div class="view hidden" id="viewVideos">
+      <div class="favorites-header">
+        <button class="favorites-back-btn" id="videosBackBtn">&larr;</button>
+        <h2 class="favorites-title">My Videos</h2>
+      </div>
+      <div id="videosListContainer">
+        <div class="favorites-empty">Loading...</div>
+      </div>
+    </div>
+
   </main>
 
   <!-- Image Lightbox Modal -->
@@ -498,6 +574,9 @@
       <button class="lightbox-close" id="lightboxClose">&times;</button>
     </div>
   </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast"></div>
 
   <footer class="footer">
     <p>Powered by Amazon Nova AI</p>

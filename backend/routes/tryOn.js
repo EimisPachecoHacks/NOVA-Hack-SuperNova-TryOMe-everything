@@ -1,9 +1,79 @@
 const express = require("express");
 const router = express.Router();
 const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
-const { virtualTryOn: novaVirtualTryOn } = require("../services/novaCanvas");
+const { virtualTryOn: novaVirtualTryOn, removeBackground } = require("../services/novaCanvas");
 const { virtualTryOn: geminiVirtualTryOn, virtualTryOnOutfit: geminiOutfitTryOn, extractGarment, buildSmartPrompt } = require("../services/gemini");
 const { analyzeProduct, classifyOutfit, hasPersonInImage } = require("../services/novaLite");
+
+// ---------------------------------------------------------------------------
+// Shared garment preprocessing — single source of truth for all try-on flows
+// Detects model/person in garment image and extracts clean garment-only version
+// Fallback chain: Gemini extraction → Nova Canvas BG removal → original
+// ---------------------------------------------------------------------------
+async function preprocessGarment(imageBase64, label = "garment") {
+  const debugSteps = [];
+
+  // Step A: Person detection
+  let hasPerson = false;
+  let garmentDescription = null;
+  try {
+    console.log(`\x1b[35m  [preprocess:${label}] Checking for person in image...\x1b[0m`);
+    const s = Date.now();
+    const result = await hasPersonInImage(imageBase64);
+    hasPerson = result.hasPerson;
+    garmentDescription = result.garmentDescription;
+    const t = ((Date.now() - s) / 1000).toFixed(1);
+    console.log(`\x1b[36m  [preprocess:${label}] hasPerson=${hasPerson} (${t}s)\x1b[0m`);
+    debugSteps.push({ step: "person-detection", hasPerson, garmentDescription, time: t + "s" });
+  } catch (err) {
+    console.warn(`\x1b[31m  [preprocess:${label}] Person detection failed: ${err.message}\x1b[0m`);
+    debugSteps.push({ step: "person-detection", error: err.message });
+  }
+
+  if (!hasPerson) {
+    return { image: imageBase64, method: "original", debugSteps };
+  }
+
+  // Step B: Gemini garment extraction (primary)
+  try {
+    console.log(`\x1b[35m  [preprocess:${label}] Extracting garment via Gemini...\x1b[0m`);
+    const s = Date.now();
+    const extracted = await extractGarment(imageBase64, garmentDescription);
+    const t = ((Date.now() - s) / 1000).toFixed(1);
+    if (extracted && extracted.length > 100) {
+      console.log(`\x1b[32m  [preprocess:${label}] Gemini extraction SUCCESS (${t}s) — ${extracted.length} chars\x1b[0m`);
+      debugSteps.push({ step: "gemini-extraction", success: true, time: t + "s" });
+      return { image: extracted, method: "extracted", debugSteps };
+    }
+    console.warn(`\x1b[33m  [preprocess:${label}] Gemini extraction returned empty (${t}s)\x1b[0m`);
+    debugSteps.push({ step: "gemini-extraction", success: false, time: t + "s", reason: "empty result" });
+  } catch (err) {
+    console.warn(`\x1b[31m  [preprocess:${label}] Gemini extraction failed: ${err.message}\x1b[0m`);
+    debugSteps.push({ step: "gemini-extraction", success: false, error: err.message });
+  }
+
+  // Step C: Nova Canvas background removal (fallback)
+  try {
+    console.log(`\x1b[35m  [preprocess:${label}] Fallback: Nova Canvas BG removal...\x1b[0m`);
+    const s = Date.now();
+    const bgRemoved = await removeBackground(imageBase64);
+    const t = ((Date.now() - s) / 1000).toFixed(1);
+    if (bgRemoved && bgRemoved.length > 100) {
+      console.log(`\x1b[32m  [preprocess:${label}] BG removal SUCCESS (${t}s) — ${bgRemoved.length} chars\x1b[0m`);
+      debugSteps.push({ step: "bg-removal", success: true, time: t + "s" });
+      return { image: bgRemoved, method: "bg-removed", debugSteps };
+    }
+    console.warn(`\x1b[33m  [preprocess:${label}] BG removal returned empty (${t}s)\x1b[0m`);
+    debugSteps.push({ step: "bg-removal", success: false, time: t + "s", reason: "empty result" });
+  } catch (err) {
+    console.warn(`\x1b[31m  [preprocess:${label}] BG removal failed: ${err.message}\x1b[0m`);
+    debugSteps.push({ step: "bg-removal", success: false, error: err.message });
+  }
+
+  // All preprocessing failed — use original with warning
+  console.warn(`\x1b[33m  [preprocess:${label}] ⚠ All preprocessing failed — using original image with model\x1b[0m`);
+  return { image: imageBase64, method: "original-with-model", debugSteps };
+}
 const { optionalAuth } = require("../middleware/auth");
 const { getProfile } = require("../services/dynamodb");
 
@@ -17,6 +87,13 @@ const s3Client = new S3Client({
 });
 
 const S3_USER_BUCKET = process.env.S3_USER_BUCKET || "nova-tryonme-users";
+
+const VALID_GARMENT_CLASSES = [
+  "UPPER_BODY", "LOWER_BODY", "FULL_BODY", "FOOTWEAR",
+  "LONG_SLEEVE_SHIRT", "SHORT_SLEEVE_SHIRT", "NO_SLEEVE_SHIRT",
+  "LONG_PANTS", "SHORT_PANTS", "LONG_DRESS", "SHORT_DRESS",
+  "FULL_BODY_OUTFIT", "SHOES", "BOOTS"
+];
 
 async function fetchPhotoFromS3(key) {
   const result = await s3Client.send(new GetObjectCommand({
@@ -39,8 +116,8 @@ router.post("/", optionalAuth, async (req, res, next) => {
       const profile = await getProfile(req.userId);
       if (profile) {
         // Use selected pose from generatedPhotoKeys, fallback to bodyPhotoKey
-        const idx = typeof poseIndex === "number" ? poseIndex : 0;
-        if (profile.generatedPhotoKeys && profile.generatedPhotoKeys[idx]) {
+        const idx = typeof poseIndex === "number" ? Math.max(0, Math.min(poseIndex, (profile.generatedPhotoKeys || []).length - 1)) : 0;
+        if (profile.generatedPhotoKeys && profile.generatedPhotoKeys.length > 0 && profile.generatedPhotoKeys[idx]) {
           sourceImage = await fetchPhotoFromS3(profile.generatedPhotoKeys[idx]);
         } else if (profile.bodyPhotoKey) {
           sourceImage = await fetchPhotoFromS3(profile.bodyPhotoKey);
@@ -116,60 +193,24 @@ router.post("/", optionalAuth, async (req, res, next) => {
     }
 
     // Validate garmentClass
-    const validClasses = [
-      "UPPER_BODY", "LOWER_BODY", "FULL_BODY", "FOOTWEAR",
-      "LONG_SLEEVE_SHIRT", "SHORT_SLEEVE_SHIRT", "NO_SLEEVE_SHIRT",
-      "LONG_PANTS", "SHORT_PANTS", "LONG_DRESS", "SHORT_DRESS",
-      "FULL_BODY_OUTFIT", "SHOES", "BOOTS"
-    ];
-    if (!garmentClass || !validClasses.includes(garmentClass)) {
+    if (!garmentClass || !VALID_GARMENT_CLASSES.includes(garmentClass)) {
       garmentClass = "UPPER_BODY";
     }
 
     // ═══════════════════════════════════════════════════
-    // STEP 2: PERSON DETECTION (Nova 2 Lite via Bedrock)
+    // STEP 2: GARMENT PREPROCESSING (shared pipeline)
+    // Person detection → Gemini extraction → Nova BG removal fallback
     // ═══════════════════════════════════════════════════
-    let personResult = { hasPerson: false, garmentDescription: null };
-    try {
-      console.log(`\n\x1b[1m\x1b[35m▶ STEP 2: PERSON DETECTION [Nova 2 Lite via Bedrock]\x1b[0m`);
-      console.log(`\x1b[90m  ℹ Check if the product image contains a person/model wearing the garment\x1b[0m`);
+    {
+      console.log(`\n\x1b[1m\x1b[35m▶ STEP 2: GARMENT PREPROCESSING [shared pipeline]\x1b[0m`);
+      console.log(`\x1b[90m  ℹ Detect model in garment image and extract clean garment if needed\x1b[0m`);
       const s2 = Date.now();
-      personResult = await hasPersonInImage(referenceImage);
+      const preprocessed = await preprocessGarment(referenceImage, "garment");
+      garmentImageForTryOn = preprocessed.image;
+      garmentImageUsed = preprocessed.method;
       const s2t = ((Date.now() - s2) / 1000).toFixed(1);
-      console.log(`\x1b[32m  ✓ STEP 2 COMPLETE\x1b[0m \x1b[90m(${s2t}s)\x1b[0m`);
-      console.log(`\x1b[36m    hasPerson:\x1b[0m         \x1b[1m${personResult.hasPerson}\x1b[0m`);
-      console.log(`\x1b[36m    garmentDesc:\x1b[0m       ${personResult.garmentDescription || "N/A"}`);
-      debugSteps.push({ step: "2", name: "PERSON DETECTION", model: "Nova 2 Lite via Bedrock", time: s2t + "s", result: personResult });
-    } catch (err) {
-      console.warn(`\x1b[31m  ✗ STEP 2 FAILED:\x1b[0m ${err.message} — assuming no person`);
-      debugSteps.push({ step: "2", name: "PERSON DETECTION", model: "Nova 2 Lite via Bedrock", time: "0s", result: { error: err.message, hasPerson: false } });
-    }
-
-    // ═══════════════════════════════════════════════════
-    // STEP 2.1: GARMENT EXTRACTION (Gemini 2.5 Flash) [conditional]
-    // ═══════════════════════════════════════════════════
-    if (personResult.hasPerson) {
-      try {
-        console.log(`\n\x1b[1m\x1b[35m▶ STEP 2.1: GARMENT EXTRACTION [Gemini 2.5 Flash Image]\x1b[0m`);
-        console.log(`\x1b[90m  ℹ Extract the garment from the model photo into a clean white-background image\x1b[0m`);
-        const s21 = Date.now();
-        const extracted = await extractGarment(referenceImage, personResult.garmentDescription);
-        const s21t = ((Date.now() - s21) / 1000).toFixed(1);
-        if (extracted && extracted.length > 100) {
-          garmentImageForTryOn = extracted;
-          garmentImageUsed = "extracted";
-          console.log(`\x1b[32m  ✓ STEP 2.1 COMPLETE\x1b[0m \x1b[90m(${s21t}s)\x1b[0m — extracted: ${extracted.length} chars`);
-        } else {
-          console.warn(`\x1b[33m  ⚠ STEP 2.1: extraction returned empty, using original\x1b[0m`);
-        }
-        debugSteps.push({ step: "2.1", name: "GARMENT EXTRACTION", model: "Gemini 2.5 Flash Image", time: s21t + "s", result: { extracted: garmentImageUsed === "extracted", imageLength: extracted ? extracted.length : 0 } });
-      } catch (err) {
-        console.warn(`\x1b[31m  ✗ STEP 2.1 FAILED:\x1b[0m ${err.message} — using original image`);
-        debugSteps.push({ step: "2.1", name: "GARMENT EXTRACTION", model: "Gemini 2.5 Flash Image", time: "0s", result: { error: err.message, extracted: false } });
-      }
-    } else {
-      console.log(`\n\x1b[90m  ⏭ STEP 2.1: SKIPPED (no person detected)\x1b[0m`);
-      debugSteps.push({ step: "2.1", name: "GARMENT EXTRACTION", model: "Gemini 2.5 Flash Image", time: "skipped", result: { skipped: true, reason: "no person in image" } });
+      console.log(`\x1b[32m  ✓ STEP 2 COMPLETE\x1b[0m \x1b[90m(${s2t}s)\x1b[0m — method: \x1b[1m${garmentImageUsed}\x1b[0m`);
+      debugSteps.push({ step: "2", name: "GARMENT PREPROCESSING", time: s2t + "s", result: { method: garmentImageUsed, substeps: preprocessed.debugSteps } });
     }
 
     // ═══════════════════════════════════════════════════
@@ -265,7 +306,8 @@ router.post("/outfit", optionalAuth, async (req, res, next) => {
       return res.status(400).json({ error: "garments array is required" });
     }
 
-    // If no sourceImage, fetch from S3
+    // If no sourceImage, fetch from S3; also fetch face reference photos for identity
+    let faceReferenceImages = [];
     if (!sourceImage && req.userId) {
       const profile = await getProfile(req.userId);
       if (profile) {
@@ -275,6 +317,15 @@ router.post("/outfit", optionalAuth, async (req, res, next) => {
         } else if (profile.bodyPhotoKey) {
           sourceImage = await fetchPhotoFromS3(profile.bodyPhotoKey);
         }
+        // Fetch original face photos as identity anchors
+        const faceKeys = (profile.originalPhotoKeys || []).filter((_, i) => i >= 3); // indices 3,4 are face photos
+        for (const key of faceKeys) {
+          try {
+            const faceImg = await fetchPhotoFromS3(key);
+            if (faceImg && faceImg.length > 100) faceReferenceImages.push(faceImg);
+          } catch (_) {}
+        }
+        console.log(`\x1b[36m  faceReferences:\x1b[0m  ${faceReferenceImages.length} loaded`);
       }
     }
 
@@ -304,7 +355,17 @@ router.post("/outfit", optionalAuth, async (req, res, next) => {
     console.log(`\x1b[36m  sourceImage:\x1b[0m     ${sourceImage.length} chars`);
     console.log(`\x1b[36m  framing:\x1b[0m         \x1b[1m${framing || "full"}\x1b[0m`);
 
-    const resultImage = await geminiOutfitTryOn(sourceImage, garments, framing);
+    // Preprocess all garment images in parallel (same pipeline as single try-on)
+    console.log(`\n\x1b[1m\x1b[35m▶ GARMENT PREPROCESSING [shared pipeline × ${garments.length}]\x1b[0m`);
+    const preprocessResults = await Promise.all(
+      garments.map((g) => preprocessGarment(g.imageBase64, g.label))
+    );
+    garments.forEach((g, i) => {
+      g.imageBase64 = preprocessResults[i].image;
+      console.log(`\x1b[36m    [${i}] ${g.label}:\x1b[0m method=\x1b[1m${preprocessResults[i].method}\x1b[0m`);
+    });
+
+    const resultImage = await geminiOutfitTryOn(sourceImage, garments, framing, faceReferenceImages);
 
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`\n\x1b[1m\x1b[32m╔══════════════════════════════════════════════════════╗\x1b[0m`);
