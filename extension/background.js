@@ -395,6 +395,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           if (message.necklace) outfitParams.set("necklace", message.necklace);
           if (message.earrings) outfitParams.set("earrings", message.earrings);
           if (message.bracelets) outfitParams.set("bracelets", message.bracelets);
+          if (message.sex) outfitParams.set("sex", message.sex);
           const outfitUrl = chrome.runtime.getURL(`outfit-builder/wardrobe.html?${outfitParams.toString()}`);
           chrome.tabs.create({ url: outfitUrl });
           sendResponse({ data: { opened: true } });

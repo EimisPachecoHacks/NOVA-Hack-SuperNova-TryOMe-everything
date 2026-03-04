@@ -75,38 +75,44 @@ async function initWardrobe() {
 
   if (topQuery) {
     const topSizeStr = clothesSizeParam ? ` size ${clothesSizeParam}` : "";
-    promises.push(searchCategory("top", `${topQuery} ${sexSuffix}${topSizeStr}`));
+    const tq = /top|shirt|blouse|sweater|jacket|hoodie|t-shirt|tee|tank|polo|coat|blazer|cardigan|vest|tunic|crop/i.test(topQuery) ? topQuery : `${topQuery} top`;
+    promises.push(searchCategory("top", `${tq} ${sexSuffix}${topSizeStr}`));
   } else {
     updateCategoryStatus("top", "Skipped");
   }
 
   if (bottomQuery) {
     const bottomSizeStr = clothesSizeParam ? ` size ${clothesSizeParam}` : "";
-    promises.push(searchCategory("bottom", `${bottomQuery} ${sexSuffix}${bottomSizeStr}`));
+    const bq = /bottom|pants|jeans|shorts|skirt|trousers|leggings|joggers|chinos|slacks|capri/i.test(bottomQuery) ? bottomQuery : `${bottomQuery} pants`;
+    promises.push(searchCategory("bottom", `${bq} ${sexSuffix}${bottomSizeStr}`));
   } else {
     updateCategoryStatus("bottom", "Skipped");
   }
 
   if (shoesQuery) {
     const shoesSizeStr = shoesSizeParam ? ` size ${shoesSizeParam}` : "";
-    promises.push(searchCategory("shoes", `${shoesQuery} ${sexSuffix}${shoesSizeStr}`));
+    const sq = /shoes?|sneakers?|boots?|sandals?|heels?|flats?|loafers?|moccasins?|slippers?|pumps?|oxfords?/i.test(shoesQuery) ? shoesQuery : `${shoesQuery} shoes`;
+    promises.push(searchCategory("shoes", `${sq} ${sexSuffix}${shoesSizeStr}`));
   } else {
     updateCategoryStatus("shoes", "Skipped");
   }
 
-  // Accessories (optional)
+  // Accessories (optional) — auto-prepend category name if not already in query
   const hasAccessories = necklaceQuery || earringsQuery || braceletsQuery;
   if (necklaceQuery) {
     document.getElementById("loadingNecklace").hidden = false;
-    promises.push(searchCategory("necklace", `${necklaceQuery} ${sexSuffix}`));
+    const nq = /necklace/i.test(necklaceQuery) ? necklaceQuery : `${necklaceQuery} necklace`;
+    promises.push(searchCategory("necklace", `${nq} ${sexSuffix}`));
   }
   if (earringsQuery) {
     document.getElementById("loadingEarrings").hidden = false;
-    promises.push(searchCategory("earrings", `${earringsQuery} ${sexSuffix}`));
+    const eq = /earrings?/i.test(earringsQuery) ? earringsQuery : `${earringsQuery} earrings`;
+    promises.push(searchCategory("earrings", `${eq} ${sexSuffix}`));
   }
   if (braceletsQuery) {
     document.getElementById("loadingBracelets").hidden = false;
-    promises.push(searchCategory("bracelets", `${braceletsQuery} ${sexSuffix}`));
+    const bq = /bracelets?/i.test(braceletsQuery) ? braceletsQuery : `${braceletsQuery} bracelet`;
+    promises.push(searchCategory("bracelets", `${bq} ${sexSuffix}`));
   }
 
   // Fetch user photo in parallel
@@ -756,6 +762,14 @@ function showWardrobe() {
   document.getElementById("loadingOverlay").hidden = true;
   document.getElementById("closetRoom").hidden = false;
   document.getElementById("shoeRackContainer").hidden = false;
+  // Adjust padding-top to account for the accessories ceiling height
+  const ceiling = document.getElementById("closetCeiling");
+  if (ceiling.classList.contains("has-accessories")) {
+    requestAnimationFrame(() => {
+      const ceilingHeight = ceiling.offsetHeight;
+      document.getElementById("closetRoom").style.paddingTop = (ceilingHeight + 8) + "px";
+    });
+  }
 }
 
 function updateCategoryStatus(category, status) {

@@ -1913,7 +1913,7 @@ function initStella() {
           appendTranscript('system', 'Try-on: "' + data.productTitle + '"');
           break;
         case 'build_outfit':
-          chrome.runtime.sendMessage({ type: 'VOICE_BUILD_OUTFIT', top: data.top, bottom: data.bottom, shoes: data.shoes, necklace: data.necklace, earrings: data.earrings, bracelets: data.bracelets });
+          chrome.runtime.sendMessage({ type: 'VOICE_BUILD_OUTFIT', top: data.top, bottom: data.bottom, shoes: data.shoes, necklace: data.necklace, earrings: data.earrings, bracelets: data.bracelets, sex: cachedProfile?.sex || null });
           appendTranscript('system', 'Building outfit...');
           break;
         case 'add_to_cart':

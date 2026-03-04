@@ -122,7 +122,7 @@ body {
 /* Ceiling expands when accessories are present */
 .vw-closet .closet-ceiling.has-accessories {
   height: auto;
-  padding: 0;
+  padding-top: 36px; /* push below the fixed app header */
   flex-direction: column;
   gap: 0;
 }
@@ -132,7 +132,7 @@ body {
   display: none;
 }
 
-/* Ceiling lights row — keeps the 3 orange bars together */
+/* Ceiling lights row — default: 3 orange bars centered with gaps */
 .ceiling-lights-row {
   display: flex;
   justify-content: center;
@@ -140,32 +140,43 @@ body {
   gap: 20%;
   padding: 8px 0;
 }
+/* Inside accessory-bar, space bars evenly to align under labels */
+.accessory-bar > .ceiling-lights-row {
+  justify-content: space-around;
+  gap: 0;
+  padding: 2px 40px 6px;
+}
+.accessory-bar > .ceiling-lights-row > .ceiling-light {
+  width: 120px;
+}
 
 /* ---------------------------------------------------------------------------
-   Accessory bar — vertical stack: labels → orange bars → items
+   Accessory bar — labels above original orange bars, items below
    --------------------------------------------------------------------------- */
 .accessory-bar {
   display: flex;
   flex-direction: column;
   width: 100%;
-  padding: 4px 0 6px;
+  padding: 2px 0 6px;
 }
 
 /* Labels row — 3 evenly spaced labels above the orange bars */
 .accessory-labels-row {
   display: flex;
   justify-content: space-around;
-  padding: 0 12px;
+  padding: 8px 12px 4px;
+  min-height: 28px;
 }
 .accessory-shelf-label {
   flex: 1;
   color: #FF9900;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
   text-align: center;
-  text-shadow: 0 0 8px rgba(255,153,0,0.4);
+  text-shadow: 0 0 12px rgba(255,153,0,0.6);
+  line-height: 1;
 }
 
 /* Items row — 3 columns with dividers */
@@ -187,7 +198,7 @@ body {
 }
 .accessory-shelf-items {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   justify-content: center;
   overflow-x: auto;
   scrollbar-width: thin;
@@ -198,7 +209,7 @@ body {
 .accessory-item {
   position: relative;
   flex: 0 0 auto;
-  width: 76px;
+  width: 64px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -208,8 +219,8 @@ body {
 }
 .accessory-item:hover { transform: translateY(-2px); }
 .accessory-item-img {
-  width: 68px;
-  height: 68px;
+  width: 56px;
+  height: 56px;
   border-radius: 8px;
   overflow: hidden;
   background: #111;
