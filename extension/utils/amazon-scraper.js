@@ -116,7 +116,7 @@ function scrapeProductData() {
     price = priceEl.textContent.trim();
   }
 
-  return { imageUrl, title, breadcrumbs, asin, price };
+  return { imageUrl, title, breadcrumbs, asin, productId: asin, price, retailer: "amazon", productUrl: window.location.href };
 }
 
 /**

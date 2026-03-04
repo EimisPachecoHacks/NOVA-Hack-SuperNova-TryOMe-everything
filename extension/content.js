@@ -20,7 +20,7 @@
   // ---------------------------------------------------------------------------
   // State
   // ---------------------------------------------------------------------------
-  let productData = null; // { imageUrl, title, breadcrumbs, asin, price }
+  let productData = null; // { imageUrl, title, breadcrumbs, productId, price, retailer }
   let productImageBase64 = null;
   let analysisResult = null; // Cached backend analysis response
   let panelOpen = false;
@@ -31,6 +31,7 @@
   let tryOnEnabled = false; // Toggle switch state: when ON, swatch clicks auto-trigger try-on
   let currentFraming = 'full'; // half or full body framing
   let tryOnRequestId = 0; // Incremented per try-on call to prevent stale results
+  let contextMenuImageUrl = null; // URL of the right-clicked image (for anchor fallback)
 
   // ---------------------------------------------------------------------------
   // Initialization
@@ -44,10 +45,18 @@
       if (stored.tryOnFraming) currentFraming = stored.tryOnFraming;
     } catch (_) {}
 
-    // 1. Scrape the product page
+    // 1. Scrape the product page (retry for SPA sites like Temu that render lazily)
     productData = scrapeProductData();
     if (!productData.imageUrl) {
-      console.warn("[NovaTryOnMe] Could not find product image. Aborting.");
+      const maxRetries = 10;
+      for (let i = 0; i < maxRetries; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        productData = scrapeProductData();
+        if (productData.imageUrl) break;
+      }
+    }
+    if (!productData.imageUrl) {
+      console.warn("[NovaTryOnMe] Could not find product image after retries. Aborting.");
       return;
     }
     console.log("[NovaTryOnMe] Product scraped:", productData.title);
@@ -87,6 +96,96 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Context Menu Try-On — handle right-click "Try On with SuperNova" on any image
+  // ---------------------------------------------------------------------------
+  chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
+    if (msg.type !== "CONTEXT_MENU_TRYON") return false; // Not our message — don't hold channel
+    console.log("[NovaTryOnMe] Context menu try-on triggered:", msg.imageUrl?.substring(0, 80));
+    contextMenuImageUrl = msg.imageUrl;
+
+    (async () => {
+      try {
+        // If product data wasn't scraped (e.g. unsupported site), create minimal data from the image
+        if (!productData || !productData.imageUrl) {
+          productData = {
+            imageUrl: msg.imageUrl,
+            title: document.title || "",
+            breadcrumbs: "",
+            productId: null,
+            price: null,
+            retailer: window.location.hostname.replace("www.", "").split(".")[0],
+            productUrl: msg.pageUrl || window.location.href,
+          };
+        } else {
+          // Override the product image with the right-clicked one
+          productData.imageUrl = msg.imageUrl;
+        }
+
+        // Fetch the right-clicked image as base64
+        productImageBase64 = await fetchImageAsBase64(msg.imageUrl);
+
+        // Analyze the product
+        try {
+          analysisResult = await ApiClient.analyzeProduct(
+            productImageBase64,
+            productData.title,
+            productData.breadcrumbs
+          );
+          console.log("[NovaTryOnMe] Context menu analysis:", analysisResult);
+        } catch (err) {
+          console.warn("[NovaTryOnMe] Context menu analysis failed:", err.message);
+        }
+
+        // Inject button if not present
+        if (!document.querySelector(".nova-tryon-btn")) {
+          injectTryOnButton();
+        }
+
+        // Fetch user photos and open overlay directly
+        const photos = await new Promise((resolve, reject) => {
+          chrome.runtime.sendMessage({ type: "GET_USER_PHOTOS" }, (res) => {
+            if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+            if (res && res.error) return reject(new Error(res.error));
+            resolve(res.data || res);
+          });
+        });
+
+        if (!photos || !photos.bodyPhoto) {
+          alert("Please set up your profile photos first (click the extension icon).");
+          return;
+        }
+
+        const isCosmetic = analysisResult && analysisResult.category === "cosmetics";
+        openOverlay(photos, isCosmetic);
+      } catch (err) {
+        console.error("[NovaTryOnMe] Context menu try-on failed:", err);
+        alert("Try-on failed: " + err.message);
+      }
+    })();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Voice command handlers — triggered from background.js via Stella voice agent
+  // ---------------------------------------------------------------------------
+  chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
+    if (msg.type === "VOICE_CLICK_ANIMATE") {
+      const animBtn = document.querySelector(".nova-tryon-animate-btn");
+      if (animBtn && !animBtn.disabled) animBtn.click();
+    } else if (msg.type === "VOICE_CLICK_DOWNLOAD") {
+      if (msg.downloadType === "video") {
+        const dlBtn = document.querySelector(".nova-tryon-download-video-btn");
+        if (dlBtn) dlBtn.click();
+      } else {
+        const dlBtn = document.querySelector(".nova-tryon-download-btn");
+        if (dlBtn) dlBtn.click();
+      }
+    } else if (msg.type === "VOICE_CLICK_SHARE") {
+      const shareBtn = document.querySelector(".nova-tryon-webshare-btn");
+      if (shareBtn) shareBtn.click();
+    }
+  });
+
+  // ---------------------------------------------------------------------------
   // Listen for pose/framing changes from the side panel
   // ---------------------------------------------------------------------------
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -107,18 +206,83 @@
   // ---------------------------------------------------------------------------
   // "Try It On" Button
   // ---------------------------------------------------------------------------
+  /**
+   * Find the best anchor element for injecting the try-on button/overlay.
+   * Site-specific: each retailer has different DOM structure.
+   */
+  function findImageAnchor() {
+    const host = window.location.hostname;
+    if (host.includes("amazon.")) {
+      return document.querySelector("#imageBlock") || document.querySelector("#leftCol");
+    }
+    if (host.includes("shein.")) {
+      return document.querySelector(".main-picture") ||
+             document.querySelector(".crop-image-container") ||
+             document.querySelector(".atf-left") ||
+             document.querySelector(".goods-detail.product-intro");
+    }
+    if (host.includes("temu.")) {
+      // Temu uses hashed class names and lazy-loaded carousel images.
+      // First try: large visible kwcdn image
+      const temuImgs = Array.from(document.querySelectorAll("img[src*='kwcdn.com'], img[src*='temu.com']"));
+      const largeTemu = temuImgs.find(img => { const r = img.getBoundingClientRect(); return r.width > 200 && r.height > 200; });
+      const anchorImg = largeTemu || temuImgs[0]; // fall back to first kwcdn image even if not yet rendered large
+      if (anchorImg) {
+        // Walk up to find a container that's roughly the gallery width
+        let el = anchorImg.parentElement;
+        for (let i = 0; i < 5 && el && el !== document.body; i++) {
+          const r = el.getBoundingClientRect();
+          if (r.width > 300 && r.height > 300) return el;
+          el = el.parentElement;
+        }
+        return anchorImg.parentElement;
+      }
+      // Fallback: any large visible image on the page
+      const anyLarge = Array.from(document.querySelectorAll("img"))
+        .find(img => { const r = img.getBoundingClientRect(); return r.width > 200 && r.height > 200; });
+      if (anyLarge) return anyLarge.parentElement;
+      // Fallback: og:image meta tag — find a matching img in the DOM
+      const ogImage = document.querySelector('meta[property="og:image"]')?.content;
+      if (ogImage) {
+        const ogImg = document.querySelector(`img[src="${CSS.escape(ogImage)}"]`) ||
+                      document.querySelector(`img[src*="${CSS.escape(ogImage.substring(0, 80))}"]`);
+        if (ogImg) return ogImg.parentElement;
+      }
+      return document.querySelector("#main")?.firstElementChild?.firstElementChild || null;
+    }
+    if (host.includes("shopping.google.")) {
+      return document.querySelector("[data-sh-sr]") ||
+             document.querySelector("[class*='product-viewer']") ||
+             document.querySelector("img[data-atf]")?.closest("div");
+    }
+    // Fallback: if triggered via context menu, find the right-clicked image element
+    if (contextMenuImageUrl) {
+      const contextImg = document.querySelector(`img[src="${CSS.escape(contextMenuImageUrl)}"]`) ||
+                          document.querySelector(`img[src*="${CSS.escape(contextMenuImageUrl.substring(0, 100))}"]`);
+      if (contextImg) {
+        // Walk up to find a reasonable container
+        let el = contextImg.parentElement;
+        for (let i = 0; i < 5 && el && el !== document.body; i++) {
+          const r = el.getBoundingClientRect();
+          if (r.width > 200 && r.height > 200) return el;
+          el = el.parentElement;
+        }
+        return contextImg.parentElement;
+      }
+    }
+    // Generic fallback: find the largest image container on the page
+    const imgs = Array.from(document.querySelectorAll("img"));
+    const largeImg = imgs.find(img => img.naturalWidth > 200 && img.naturalHeight > 200);
+    return largeImg?.closest("div") || null;
+  }
+
   function injectTryOnButton() {
     // Guard: don't inject a duplicate button
     if (document.querySelector(".nova-tryon-btn")) return;
 
-    // Use #imageBlock as anchor — it is STABLE and never replaced by Amazon's
-    // Twister system (unlike #imgTagWrapperId which gets destroyed on swatch change).
-    const anchor =
-      document.querySelector("#imageBlock") ||
-      document.querySelector("#leftCol");
+    const anchor = findImageAnchor();
 
     if (!anchor) {
-      console.warn("[NovaTryOnMe] No anchor element found for button.");
       return;
     }
 
@@ -141,9 +305,8 @@
 
     btn.addEventListener("click", handleTryOnClick);
 
-    // Insert as direct child of #imageBlock — this survives swatch changes
     anchor.appendChild(btn);
-    console.log("[NovaTryOnMe] Try-On button injected into #imageBlock.");
+    console.log("[NovaTryOnMe] Try-On button injected.");
   }
 
   // ---------------------------------------------------------------------------
@@ -271,26 +434,31 @@
   function openOverlay(photos, isCosmetic) {
     panelOpen = true;
 
-    // Find the product image container (use a large container, not the tiny img wrapper)
-    const imageContainer =
-      document.querySelector("#imageBlock") ||
-      document.querySelector("#leftCol") ||
-      document.querySelector("#imgTagWrapperId");
+    // Find the product image container
+    let imageContainer = findImageAnchor();
+    let useFixedOverlay = false;
 
     if (!imageContainer) {
-      console.warn("[NovaTryOnMe] No image container found for overlay.");
-      return;
+      // Fallback: use document.body and show overlay as fixed-position modal
+      console.warn("[NovaTryOnMe] No image anchor — using fixed overlay as fallback.");
+      imageContainer = document.body;
+      useFixedOverlay = true;
     }
 
-    // Ensure relative positioning so absolute overlay works
-    const containerStyle = window.getComputedStyle(imageContainer);
-    if (containerStyle.position === "static") {
-      imageContainer.style.position = "relative";
+    // Ensure relative positioning so absolute overlay works (skip for body fallback)
+    if (!useFixedOverlay) {
+      const containerStyle = window.getComputedStyle(imageContainer);
+      if (containerStyle.position === "static") {
+        imageContainer.style.position = "relative";
+      }
     }
 
     // Create overlay card
     const card = document.createElement("div");
     card.className = "nova-tryon-overlay-card";
+    if (useFixedOverlay) {
+      card.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;width:400px;max-height:90vh;overflow:auto;";
+    }
     card.innerHTML = `
       <div class="nova-tryon-overlay-header">
         <h3>SuperNova TryOnMe</h3>
@@ -392,7 +560,7 @@
       const desc = DESC[s.step] || "";
       const summary = s.result && s.result.error
         ? "FAILED: " + s.result.error
-        : JSON.stringify(s.result).substring(0, 200);
+        : (JSON.stringify(s.result) || "").substring(0, 200);
       console.log(
         `%c STEP ${s.step}: ${s.name} %c [${s.model}] %c ${desc}`,
         S, "color:#4FC3F7;font-weight:bold;", "color:#aaa;font-style:italic;"
@@ -436,18 +604,27 @@
       let resultImage;
       let debugInfo = null;
 
-      // Read selected pose index (stored locally, backend fetches actual image from S3)
+      // Read selected pose index and face index (stored locally, backend fetches actual image from S3)
       const currentPoseIdx = await new Promise((resolve) => {
         chrome.storage.local.get(["selectedPoseIndex"], (r) => resolve(r.selectedPoseIndex || 0));
       });
+      const currentFaceIdx = await new Promise((resolve) => {
+        chrome.storage.local.get(["selectedFaceIndex"], (r) => resolve(r.selectedFaceIndex || 0));
+      });
 
+      let recommendedColors = null;
       if (isCosmetic) {
+        // Send null for face so backend picks from S3; pass product image for color matching
+        console.log(`[NovaTryOnMe] Cosmetics try-on — faceIndex: ${currentFaceIdx}`);
         const response = await ApiClient.tryOnCosmetics(
-          photos.facePhoto,
+          null,
           analysisResult.cosmeticType || "lipstick",
-          analysisResult.color || null
+          analysisResult.color || null,
+          currentFaceIdx,
+          productImageBase64
         );
         resultImage = response.resultImage;
+        recommendedColors = response.recommendedColors;
       } else {
         // Send null as bodyImage so backend fetches the correct pose from S3 using poseIndex
         console.log(`[NovaTryOnMe] Try-on params — poseIdx: ${currentPoseIdx}, framing: "${currentFraming}" (type: ${typeof currentFraming}), garmentClass: ${analysisResult ? analysisResult.garmentClass : 'null'}`);
@@ -477,6 +654,15 @@
       clearInterval(timerInterval);
       const tryOnElapsed = ((Date.now() - tryOnStart) / 1000).toFixed(1);
 
+      if (!resultImage) {
+        throw new Error("No result image returned from the server");
+      }
+
+      // For cosmetics: pad the image into a portrait frame so the face isn't zoomed-in
+      if (isCosmetic) {
+        resultImage = await padToPortrait(resultImage);
+      }
+
       // Display the result (minimal overlay — controls are in the side panel)
       const resultDataUrl = base64ToDataUrl(resultImage);
       body.innerHTML = `
@@ -490,20 +676,28 @@
             ${analysisResult.styleTips}
           </div>
         ` : ""}
-        <div style="text-align:center;">
-          <button class="nova-tryon-favorite-btn" data-asin="${productData.asin || ''}">
-            <span class="nova-tryon-favorite-icon">\u2661</span> Save to Favorites
+        ${recommendedColors && recommendedColors.length ? `
+          <div class="nova-tryon-style-tips">
+            <div class="nova-tryon-style-tips-title">Best Colors for Your Skin Tone</div>
+            <div class="nova-tryon-color-recs">${recommendedColors.map(c => `<span class="nova-tryon-color-chip">${c}</span>`).join("")}</div>
+          </div>
+        ` : ""}
+        <div class="nova-tryon-share-row">
+          <button class="nova-tryon-favorite-btn" data-product-id="${productData.productId || productData.asin || ''}">
+            <span class="nova-tryon-favorite-icon">\u2661</span> Save
           </button>
+          <button class="nova-tryon-share-btn nova-tryon-download-btn" title="Download image">&#8681; Download</button>
+          <button class="nova-tryon-share-btn nova-tryon-webshare-btn" title="Share">&#8599; Share</button>
+          <button class="nova-tryon-share-btn nova-tryon-email-btn" title="Email">&#9993; Email</button>
         </div>
         <button class="nova-tryon-animate-btn">
           &#9654; Animate
         </button>
       `;
 
-      // Store debug images — fetch the actual pose used from backend
-      if (debugInfo) {
-        // Get the pose image the backend actually used (from S3 via poseIndex)
-        let debugBodyPhoto = photos.bodyPhoto;
+      // Store debug images — fetch the actual photo used from backend
+      {
+        let debugPhoto = isCosmetic ? photos.facePhoto : photos.bodyPhoto;
         try {
           const allPhotos = await new Promise((resolve, reject) => {
             chrome.runtime.sendMessage({
@@ -514,12 +708,31 @@
               resolve(res?.data || res);
             });
           });
-          if (allPhotos.generated && allPhotos.generated[currentPoseIdx]) {
-            debugBodyPhoto = allPhotos.generated[currentPoseIdx];
+          if (isCosmetic && allPhotos.originals) {
+            const facePhotos = allPhotos.originals.slice(3);
+            const idx = Math.min(currentFaceIdx, facePhotos.length - 1);
+            if (facePhotos[idx]) debugPhoto = facePhotos[idx];
+          } else if (allPhotos.generated && allPhotos.generated[currentPoseIdx]) {
+            debugPhoto = allPhotos.generated[currentPoseIdx];
           }
         } catch (_) {}
-        storeDebugImages(debugBodyPhoto, productImageBase64, debugInfo);
+        storeDebugImages(debugPhoto, productImageBase64, debugInfo || {});
       }
+
+      // Store last try-on context for voice commands
+      chrome.storage.local.set({
+        lastTryOn: {
+          resultImage,
+          productId: productData.productId || productData.asin || "",
+          productTitle: productData.title || "",
+          productImage: productData.imageUrl || "",
+          productUrl: productData.productUrl || "",
+          retailer: productData.retailer || "amazon",
+          category: analysisResult ? analysisResult.category : "",
+          garmentClass: analysisResult ? analysisResult.garmentClass : "",
+          timestamp: Date.now(),
+        }
+      });
 
       // Favorites button handler
       const favBtn = body.querySelector(".nova-tryon-favorite-btn");
@@ -538,14 +751,17 @@
               return;
             }
 
-            console.log("[NovaTryOnMe] SAVE FAVORITE — asin:", productData.asin);
+            const pid = productData.productId || productData.asin || "";
+            console.log("[NovaTryOnMe] SAVE FAVORITE — productId:", pid);
             console.log("[NovaTryOnMe]   productImage:", productData.imageUrl ? "YES (" + productData.imageUrl.substring(0, 60) + "...)" : "NO");
             console.log("[NovaTryOnMe]   tryOnResultImage:", resultImage ? "YES (length=" + resultImage.length + ", starts=" + resultImage.substring(0, 30) + "...)" : "NO/EMPTY");
 
             const favResult = await ApiClient.addFavorite({
-              asin: productData.asin || "",
+              asin: pid,
               productTitle: productData.title || "",
               productImage: productData.imageUrl || "",
+              productUrl: productData.productUrl || "",
+              retailer: productData.retailer || "amazon",
               category: analysisResult ? analysisResult.category : "",
               garmentClass: analysisResult ? analysisResult.garmentClass : "",
               tryOnResultImage: resultImage,
@@ -558,6 +774,70 @@
             console.error("[NovaTryOnMe] Failed to save favorite:", err);
             alert("Failed to save favorite: " + err.message);
           }
+        });
+      }
+
+      // --- Share buttons ---
+      const downloadBtn = body.querySelector(".nova-tryon-download-btn");
+      if (downloadBtn) {
+        downloadBtn.addEventListener("click", () => {
+          const a = document.createElement("a");
+          a.href = resultDataUrl;
+          a.download = `tryon-${productData.productId || productData.asin || Date.now()}.jpg`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        });
+      }
+
+      const webShareBtn = body.querySelector(".nova-tryon-webshare-btn");
+      if (webShareBtn) {
+        if (!navigator.share) {
+          webShareBtn.style.display = "none";
+        } else {
+          webShareBtn.addEventListener("click", async () => {
+            try {
+              const blob = await (await fetch(resultDataUrl)).blob();
+              const file = new File([blob], "tryon-result.jpg", { type: "image/jpeg" });
+              await navigator.share({
+                title: `Virtual Try-On: ${productData.title || ""}`.trim(),
+                text: "Check out this virtual try-on from SuperNova TryOnMe!",
+                files: [file],
+              });
+            } catch (err) {
+              if (err.name !== "AbortError") console.error("[NovaTryOnMe] Share failed:", err);
+            }
+          });
+        }
+      }
+
+      const emailBtn = body.querySelector(".nova-tryon-email-btn");
+      if (emailBtn) {
+        emailBtn.addEventListener("click", () => {
+          const email = prompt("Enter email address to send this try-on result:");
+          if (!email) return;
+          const message = prompt("Add a message (optional):", "");
+          emailBtn.textContent = "Sending...";
+          emailBtn.disabled = true;
+          chrome.runtime.sendMessage({
+            type: "API_CALL",
+            endpoint: "/api/share/email",
+            method: "POST",
+            data: {
+              recipientEmail: email,
+              imageBase64: resultImage,
+              productTitle: productData.title || "",
+              message: message || "",
+            },
+          }, (res) => {
+            if (res && res.success) {
+              emailBtn.textContent = "\u2713 Sent!";
+            } else {
+              emailBtn.textContent = "\u2717 Failed";
+              emailBtn.disabled = false;
+              setTimeout(() => { emailBtn.innerHTML = "&#9993; Email"; }, 2000);
+            }
+          });
         });
       }
 
@@ -847,11 +1127,11 @@
         saveBtn.textContent = "Saving...";
         saveBtn.disabled = true;
         try {
-          const asin = productData?.asin || "";
+          const pid = productData?.productId || productData?.asin || "";
           await ApiClient.saveVideo(
             videoResult.videoUrl || null,
             videoResult.videoBase64 || null,
-            asin,
+            pid,
             productData?.title || "",
             productData?.imageUrl || ""
           );
@@ -885,6 +1165,18 @@
           console.error("[NovaTryOnMe] Download failed:", err);
           downloadBtn.textContent = "Failed";
           setTimeout(() => { downloadBtn.textContent = "Download"; downloadBtn.disabled = false; }, 2000);
+        }
+      });
+
+      // Store last video context for voice commands
+      chrome.storage.local.set({
+        lastVideo: {
+          videoUrl: videoResult.videoUrl || null,
+          videoBase64: videoResult.videoBase64 || null,
+          productId: productData?.productId || productData?.asin || "",
+          productTitle: productData?.title || "",
+          productImage: productData?.imageUrl || "",
+          timestamp: Date.now(),
         }
       });
 

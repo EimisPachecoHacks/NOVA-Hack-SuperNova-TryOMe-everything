@@ -172,6 +172,26 @@ body {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+/* Item number badge */
+.nova-card-number {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, #FF9900 0%, #E88B00 100%);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 .nova-card:hover {
@@ -441,6 +461,20 @@ body {
   color: #fff;
   cursor: default;
 }
+
+.nova-btn-animate {
+  border: 1px solid #4FC3F7;
+  background: transparent;
+  color: #4FC3F7;
+  border-radius: 8px;
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.nova-btn-animate:hover:not(:disabled) { background: #4FC3F7; color: #fff; }
+.nova-btn-animate:disabled { opacity: 0.6; cursor: default; }
 
 /* Responsive */
 @media (max-width: 600px) {

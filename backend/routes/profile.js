@@ -2,21 +2,10 @@ const express = require("express");
 const router = express.Router();
 const fs = require("fs");
 const path = require("path");
-const { S3Client, PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { requireAuth } = require("../middleware/auth");
 const { getProfile, putProfile } = require("../services/dynamodb");
 const { generateProfilePhoto } = require("../services/gemini");
-
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || "us-east-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    ...(process.env.AWS_SESSION_TOKEN && { sessionToken: process.env.AWS_SESSION_TOKEN }),
-  },
-});
-
-const S3_USER_BUCKET = process.env.S3_USER_BUCKET || "nova-tryonme-users";
+const { s3Client, S3_USER_BUCKET, PutObjectCommand, fetchPhotoFromS3 } = require("../services/s3");
 
 // GET /api/profile
 router.get("/", requireAuth, async (req, res, next) => {
@@ -44,6 +33,8 @@ router.put("/", requireAuth, async (req, res, next) => {
     const sex = req.body.sex === "male" || req.body.sex === "female" ? req.body.sex : undefined;
     const clothesSize = stripTags(req.body.clothesSize);
     const shoesSize = req.body.shoesSize ? String(req.body.shoesSize).trim() : undefined;
+    const language = stripTags(req.body.language);
+    console.log(`[profile] PUT — language received: "${language}" (raw: "${req.body.language}")`);
 
     // Calculate age from birthday
     let age = null;
@@ -69,6 +60,7 @@ router.put("/", requireAuth, async (req, res, next) => {
       shoesSize: shoesSize || existing.shoesSize,
       country: country || existing.country,
       city: city || existing.city,
+      language: language || existing.language || "en",
       email: req.userEmail || existing.email,
     };
 
@@ -152,17 +144,7 @@ router.get("/photo/:type", requireAuth, async (req, res, next) => {
       return res.status(404).json({ error: `No ${type} photo found` });
     }
 
-    const result = await s3Client.send(new GetObjectCommand({
-      Bucket: S3_USER_BUCKET,
-      Key: photoKey,
-    }));
-
-    const chunks = [];
-    for await (const chunk of result.Body) {
-      chunks.push(chunk);
-    }
-    const base64 = Buffer.concat(chunks).toString("base64");
-
+    const base64 = await fetchPhotoFromS3(photoKey);
     res.json({ image: base64 });
   } catch (error) {
     next(error);
@@ -170,8 +152,134 @@ router.get("/photo/:type", requireAuth, async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
+// In-memory job store for async profile photo generation (#13)
+// ---------------------------------------------------------------------------
+const photoJobs = new Map(); // jobId → { status, generatedPhotos, profileComplete, error, createdAt }
+
+// Cleanup jobs older than 30 minutes to prevent memory leaks
+setInterval(() => {
+  const cutoff = Date.now() - 30 * 60 * 1000;
+  for (const [id, job] of photoJobs) {
+    if (job.createdAt < cutoff) photoJobs.delete(id);
+  }
+}, 5 * 60 * 1000);
+
+/**
+ * Run the actual photo generation logic (shared by sync and async modes).
+ * Returns { generatedPhotos, profileComplete } or throws.
+ */
+async function runPhotoGeneration(userId, userEmail, userImages) {
+  console.log("\x1b[1m\x1b[33m╔══════════════════════════════════════════════════════════╗");
+  console.log("║     PROFILE PHOTO GENERATION — 3 Poses                  ║");
+  console.log("╚══════════════════════════════════════════════════════════╝\x1b[0m");
+
+  // Load pose templates from backend/assets/
+  const assetsDir = path.join(__dirname, "..", "assets");
+  const poseTemplateFiles = ["pose_template1.jpg", "pose_template2.jpg", "pose_template3.jpg"];
+  const poseTemplates = poseTemplateFiles.map((file) => {
+    const filepath = path.join(assetsDir, file);
+    return fs.readFileSync(filepath).toString("base64");
+  });
+
+  // Store 5 original user images in S3
+  const originalKeys = [];
+  const bodyLabels = ["original_body_0", "original_body_1", "original_body_2"];
+  const faceLabels = ["original_face_0", "original_face_1"];
+  const allLabels = [...bodyLabels, ...faceLabels];
+
+  for (let i = 0; i < 5; i++) {
+    const key = `users/${userId}/${allLabels[i]}.jpg`;
+    const buffer = Buffer.from(userImages[i], "base64");
+    await s3Client.send(new PutObjectCommand({
+      Bucket: S3_USER_BUCKET,
+      Key: key,
+      Body: buffer,
+      ContentType: "image/jpeg",
+    }));
+    originalKeys.push(key);
+    console.log(`\x1b[36m  Stored: ${key} (${(buffer.length / 1024).toFixed(0)} KB)\x1b[0m`);
+  }
+
+  // Generate 3 posed profile photos (chained: pose 1 result anchors poses 2 & 3)
+  const generatedPhotos = [];
+  const generatedKeys = [];
+  let anchorImage = null;
+  const totalStart = Date.now();
+
+  const poseDescriptions = [
+    "standing upright facing camera, hands resting at hip level, slight forward lean, weight on both feet",
+    "mid-stride walking pose, left leg forward and right leg back, arms relaxed at sides, body angled slightly to the right",
+    "standing facing camera, hands clasped together in front at waist level, legs slightly crossed, weight shifted to one side",
+  ];
+
+  for (let i = 0; i < 3; i++) {
+    const poseLabel = `POSE ${i + 1}/3`;
+    console.log(`\n\x1b[1m\x1b[35m▶ GENERATING ${poseLabel}\x1b[0m [gemini-3.1-flash-image-preview]${anchorImage ? " (with anchor)" : ""}`);
+    const stepStart = Date.now();
+
+    try {
+      const resultBase64 = await generateProfilePhoto(userImages, poseTemplates[i], "image/jpeg", anchorImage, poseDescriptions[i]);
+      const elapsed = ((Date.now() - stepStart) / 1000).toFixed(1);
+      console.log(`\x1b[32m  ✓ ${poseLabel} COMPLETE (${elapsed}s) — ${resultBase64.length} chars\x1b[0m`);
+
+      generatedPhotos.push(resultBase64);
+
+      if (!anchorImage) {
+        anchorImage = resultBase64;
+        console.log(`\x1b[36m  ↳ Set as identity anchor for remaining poses\x1b[0m`);
+      }
+
+      const key = `users/${userId}/generated_pose_${i}.jpg`;
+      const buffer = Buffer.from(resultBase64, "base64");
+      await s3Client.send(new PutObjectCommand({
+        Bucket: S3_USER_BUCKET,
+        Key: key,
+        Body: buffer,
+        ContentType: "image/jpeg",
+      }));
+      generatedKeys.push(key);
+    } catch (err) {
+      const elapsed = ((Date.now() - stepStart) / 1000).toFixed(1);
+      console.log(`\x1b[31m  ✗ ${poseLabel} FAILED (${elapsed}s): ${err.message}\x1b[0m`);
+      generatedPhotos.push(null);
+    }
+  }
+
+  const totalElapsed = ((Date.now() - totalStart) / 1000).toFixed(1);
+  const successCount = generatedPhotos.filter(Boolean).length;
+
+  console.log(`\n\x1b[1m\x1b[33m╔══════════════════════════════════════════════════════════╗`);
+  console.log(`║  ✅ PROFILE GENERATION DONE — ${successCount}/3 in ${totalElapsed}s`);
+  console.log(`╚══════════════════════════════════════════════════════════╝\x1b[0m`);
+
+  // Update profile in DynamoDB
+  const existing = await getProfile(userId) || {};
+  const profileData = {
+    ...existing,
+    originalPhotoKeys: originalKeys,
+    generatedPhotoKeys: generatedKeys,
+    bodyPhotoKey: generatedKeys[0] || existing.bodyPhotoKey,
+    facePhotoKey: originalKeys[3] || existing.facePhotoKey,
+    email: userEmail || existing.email,
+  };
+
+  profileData.profileComplete = !!(
+    profileData.firstName &&
+    profileData.lastName &&
+    profileData.birthday &&
+    profileData.bodyPhotoKey &&
+    profileData.facePhotoKey
+  );
+
+  await putProfile(userId, profileData);
+
+  return { generatedPhotos, profileComplete: profileData.profileComplete };
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/profile/generate-photos
 // Receives 5 user images, generates 3 AI-posed profile photos
+// Supports async mode: pass { async: true } to get immediate jobId response
 // ---------------------------------------------------------------------------
 router.post("/generate-photos", requireAuth, async (req, res, next) => {
   try {
@@ -189,123 +297,51 @@ router.post("/generate-photos", requireAuth, async (req, res, next) => {
       }
     }
 
-    console.log("\x1b[1m\x1b[33m╔══════════════════════════════════════════════════════════╗");
-    console.log("║     PROFILE PHOTO GENERATION — 3 Poses                  ║");
-    console.log("╚══════════════════════════════════════════════════════════╝\x1b[0m");
+    // ---------------------------------------------------------------
+    // Async mode: return immediately, generate in background
+    // ---------------------------------------------------------------
+    if (req.body.async) {
+      const { v4: uuidv4 } = require("uuid");
+      const jobId = uuidv4();
+      photoJobs.set(jobId, { status: "processing", createdAt: Date.now() });
 
-    // Load pose templates from backend/assets/
-    const assetsDir = path.join(__dirname, "..", "assets");
-    const poseTemplateFiles = ["pose_template1.jpg", "pose_template2.jpg", "pose_template3.jpg"];
-    const poseTemplates = poseTemplateFiles.map((file) => {
-      const filepath = path.join(assetsDir, file);
-      return fs.readFileSync(filepath).toString("base64");
-    });
+      // Respond immediately — client polls GET /api/profile/generate-photos/status/:jobId
+      res.json({ jobId, status: "processing" });
 
-    // Store 5 original user images in S3
-    const originalKeys = [];
-    const bodyLabels = ["original_body_0", "original_body_1", "original_body_2"];
-    const faceLabels = ["original_face_0", "original_face_1"];
-    const allLabels = [...bodyLabels, ...faceLabels];
-
-    for (let i = 0; i < 5; i++) {
-      const key = `users/${req.userId}/${allLabels[i]}.jpg`;
-      const buffer = Buffer.from(userImages[i], "base64");
-      await s3Client.send(new PutObjectCommand({
-        Bucket: S3_USER_BUCKET,
-        Key: key,
-        Body: buffer,
-        ContentType: "image/jpeg",
-      }));
-      originalKeys.push(key);
-      console.log(`\x1b[36m  Stored: ${key} (${(buffer.length / 1024).toFixed(0)} KB)\x1b[0m`);
+      // Fire-and-forget background generation
+      runPhotoGeneration(req.userId, req.userEmail, userImages)
+        .then((result) => {
+          photoJobs.set(jobId, { status: "complete", ...result, createdAt: Date.now() });
+        })
+        .catch((err) => {
+          console.error(`[profile] Async photo generation failed: ${err.message}`);
+          photoJobs.set(jobId, { status: "error", error: err.message, createdAt: Date.now() });
+        });
+      return;
     }
 
-    // Generate 3 posed profile photos (chained: pose 1 result anchors poses 2 & 3)
-    const generatedPhotos = [];
-    const generatedKeys = [];
-    let anchorImage = null; // First generated image becomes anchor for consistency
-    const totalStart = Date.now();
-
-    // Text descriptions of each mannequin pose to help the model differentiate them
-    const poseDescriptions = [
-      "standing upright facing camera, hands resting at hip level, slight forward lean, weight on both feet",
-      "mid-stride walking pose, left leg forward and right leg back, arms relaxed at sides, body angled slightly to the right",
-      "standing facing camera, hands clasped together in front at waist level, legs slightly crossed, weight shifted to one side",
-    ];
-
-    for (let i = 0; i < 3; i++) {
-      const poseLabel = `POSE ${i + 1}/3`;
-      console.log(`\n\x1b[1m\x1b[35m▶ GENERATING ${poseLabel}\x1b[0m [gemini-3.1-flash-image-preview]${anchorImage ? " (with anchor)" : ""}`);
-      const stepStart = Date.now();
-
-      try {
-        const resultBase64 = await generateProfilePhoto(userImages, poseTemplates[i], "image/jpeg", anchorImage, poseDescriptions[i]);
-        const elapsed = ((Date.now() - stepStart) / 1000).toFixed(1);
-        console.log(`\x1b[32m  ✓ ${poseLabel} COMPLETE (${elapsed}s) — ${resultBase64.length} chars\x1b[0m`);
-
-        generatedPhotos.push(resultBase64);
-
-        // Use first successful result as anchor for subsequent poses
-        if (!anchorImage) {
-          anchorImage = resultBase64;
-          console.log(`\x1b[36m  ↳ Set as identity anchor for remaining poses\x1b[0m`);
-        }
-
-        // Store generated image in S3
-        const key = `users/${req.userId}/generated_pose_${i}.jpg`;
-        const buffer = Buffer.from(resultBase64, "base64");
-        await s3Client.send(new PutObjectCommand({
-          Bucket: S3_USER_BUCKET,
-          Key: key,
-          Body: buffer,
-          ContentType: "image/jpeg",
-        }));
-        generatedKeys.push(key);
-      } catch (err) {
-        const elapsed = ((Date.now() - stepStart) / 1000).toFixed(1);
-        console.log(`\x1b[31m  ✗ ${poseLabel} FAILED (${elapsed}s): ${err.message}\x1b[0m`);
-        generatedPhotos.push(null);
-      }
-    }
-
-    const totalElapsed = ((Date.now() - totalStart) / 1000).toFixed(1);
-    const successCount = generatedPhotos.filter(Boolean).length;
-
-    console.log(`\n\x1b[1m\x1b[33m╔══════════════════════════════════════════════════════════╗`);
-    console.log(`║  ✅ PROFILE GENERATION DONE — ${successCount}/3 in ${totalElapsed}s`);
-    console.log(`╚══════════════════════════════════════════════════════════╝\x1b[0m`);
-
-    // Update profile in DynamoDB
-    const existing = await getProfile(req.userId) || {};
-    const profileData = {
-      ...existing,
-      originalPhotoKeys: originalKeys,
-      generatedPhotoKeys: generatedKeys,
-      // Set first generated photo as bodyPhotoKey for backward compat with try-on
-      bodyPhotoKey: generatedKeys[0] || existing.bodyPhotoKey,
-      // Set first face as facePhotoKey for backward compat
-      facePhotoKey: originalKeys[3] || existing.facePhotoKey,
-      email: req.userEmail || existing.email,
-    };
-
-    profileData.profileComplete = !!(
-      profileData.firstName &&
-      profileData.lastName &&
-      profileData.birthday &&
-      profileData.bodyPhotoKey &&
-      profileData.facePhotoKey
-    );
-
-    await putProfile(req.userId, profileData);
+    // ---------------------------------------------------------------
+    // Synchronous mode (default — existing behavior, unchanged)
+    // ---------------------------------------------------------------
+    const result = await runPhotoGeneration(req.userId, req.userEmail, userImages);
 
     res.json({
       success: true,
-      generatedPhotos,
-      profileComplete: profileData.profileComplete,
+      generatedPhotos: result.generatedPhotos,
+      profileComplete: result.profileComplete,
     });
   } catch (error) {
     next(error);
   }
+});
+
+// GET /api/profile/generate-photos/status/:jobId — Poll for async generation status
+router.get("/generate-photos/status/:jobId", requireAuth, (req, res) => {
+  const job = photoJobs.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ error: "Job not found or expired" });
+  }
+  res.json(job);
 });
 
 // ---------------------------------------------------------------------------
@@ -356,17 +392,9 @@ router.get("/photos/all", requireAuth, async (req, res, next) => {
       return res.json({ originals: [], generated: [] });
     }
 
-    const fetchFromS3 = async (key) => {
+    const safeFetch = async (key) => {
       try {
-        const result = await s3Client.send(new GetObjectCommand({
-          Bucket: S3_USER_BUCKET,
-          Key: key,
-        }));
-        const chunks = [];
-        for await (const chunk of result.Body) {
-          chunks.push(chunk);
-        }
-        return Buffer.concat(chunks).toString("base64");
+        return await fetchPhotoFromS3(key);
       } catch (err) {
         console.error(`[profile] Failed to fetch photo from S3: key=${key}, error=${err.message}`);
         return null;
@@ -374,11 +402,11 @@ router.get("/photos/all", requireAuth, async (req, res, next) => {
     };
 
     const originals = profile.originalPhotoKeys
-      ? await Promise.all(profile.originalPhotoKeys.map(fetchFromS3))
+      ? await Promise.all(profile.originalPhotoKeys.map(safeFetch))
       : [];
 
     const generated = profile.generatedPhotoKeys
-      ? await Promise.all(profile.generatedPhotoKeys.map(fetchFromS3))
+      ? await Promise.all(profile.generatedPhotoKeys.map(safeFetch))
       : [];
 
     res.json({ originals, generated });

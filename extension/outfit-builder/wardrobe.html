@@ -22,7 +22,7 @@
     <div class="vw-loading-overlay" id="loadingOverlay">
       <div class="vw-loading-spinner"></div>
       <h2>Building your wardrobe...</h2>
-      <p>AI is searching Amazon for matching items</p>
+      <p>AI is searching for matching items</p>
       <p class="vw-loading-hint">This may take 30–60 seconds per category</p>
       <div class="vw-loading-categories">
         <div class="vw-loading-cat" id="loadingTop">
@@ -40,6 +40,21 @@
           <span class="vw-loading-label">Shoes</span>
           <span class="vw-loading-status" id="loadingShoesStatus">Waiting...</span>
         </div>
+        <div class="vw-loading-cat" id="loadingNecklace" hidden>
+          <span class="vw-loading-icon">💍</span>
+          <span class="vw-loading-label">Necklaces</span>
+          <span class="vw-loading-status" id="loadingNecklaceStatus">Waiting...</span>
+        </div>
+        <div class="vw-loading-cat" id="loadingEarrings" hidden>
+          <span class="vw-loading-icon">💫💫</span>
+          <span class="vw-loading-label">Earrings</span>
+          <span class="vw-loading-status" id="loadingEarringsStatus">Waiting...</span>
+        </div>
+        <div class="vw-loading-cat" id="loadingBracelets" hidden>
+          <span class="vw-loading-icon">📿</span>
+          <span class="vw-loading-label">Bracelets</span>
+          <span class="vw-loading-status" id="loadingBraceletsStatus">Waiting...</span>
+        </div>
       </div>
       <p class="vw-loading-timer" id="searchTimer">Elapsed: 0s</p>
     </div>
@@ -54,11 +69,41 @@
 
     <!-- Main wardrobe (hidden until results arrive) -->
     <div class="closet-room" id="closetRoom" hidden>
-      <!-- Ceiling lights -->
-      <div class="closet-ceiling">
-        <div class="ceiling-light"></div>
-        <div class="ceiling-light"></div>
-        <div class="ceiling-light"></div>
+      <!-- Accessories shelf (3 horizontal columns) + ceiling lights -->
+      <div class="closet-ceiling" id="closetCeiling">
+        <div class="accessory-bar" id="accessoryBar" hidden>
+          <!-- Labels row above orange bars -->
+          <div class="accessory-labels-row">
+            <span class="accessory-shelf-label">Necklaces</span>
+            <span class="accessory-shelf-label">Earrings</span>
+            <span class="accessory-shelf-label">Bracelets</span>
+          </div>
+          <!-- Original 3 orange bars -->
+          <div class="ceiling-lights-row">
+            <div class="ceiling-light"></div>
+            <div class="ceiling-light"></div>
+            <div class="ceiling-light"></div>
+          </div>
+          <!-- Items row: 3 columns -->
+          <div class="accessory-items-row">
+            <div class="accessory-shelf" id="necklaceShelf">
+              <div class="accessory-shelf-items" id="necklaceContainer"></div>
+            </div>
+            <div class="accessory-divider"></div>
+            <div class="accessory-shelf" id="earringsShelf">
+              <div class="accessory-shelf-items" id="earringsContainer"></div>
+            </div>
+            <div class="accessory-divider"></div>
+            <div class="accessory-shelf" id="braceletsShelf">
+              <div class="accessory-shelf-items" id="braceletsContainer"></div>
+            </div>
+          </div>
+        </div>
+        <div class="ceiling-lights-row" id="ceilingLightsDefault">
+          <div class="ceiling-light"></div>
+          <div class="ceiling-light"></div>
+          <div class="ceiling-light"></div>
+        </div>
       </div>
 
       <!-- Left Wall: Tops -->
@@ -113,7 +158,8 @@
         <div class="vw-controls" id="controlBar">
           <button class="vw-btn-tryon" id="tryOnBtn" disabled>&#10024; Try On</button>
           <button class="vw-btn-favorite" id="favoriteBtn" hidden>&#9825; Save to Favorites</button>
-          <a class="vw-btn-buy" id="buyBtn" href="#" target="_blank" rel="noopener" hidden>Buy on Amazon</a>
+          <button class="vw-btn-animate" id="animateBtn" hidden>&#9654; Animate</button>
+          <button class="vw-btn-buy" id="buyBtn" hidden>&#128722; Add to Cart</button>
         </div>
       </div>
 

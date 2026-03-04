@@ -29,7 +29,18 @@ router.post("/", optionalAuth, async (req, res, next) => {
     res.json(result);
   } catch (error) {
     console.error(`[smartSearch] Error:`, error.message);
-    next(error);
+
+    // Return a user-friendly error instead of letting it fall through to the generic 500 handler
+    let userMessage = "Smart search encountered an issue. Please try again.";
+    if (error.message.includes("timed out")) {
+      userMessage = "The search took too long — please try a simpler query or try again in a moment.";
+    } else if (error.message.includes("Failed to spawn Python") || error.message.includes("ENOENT")) {
+      userMessage = "Smart search is temporarily unavailable. The search service could not be started.";
+    } else if (error.message.includes("No JSON output")) {
+      userMessage = "The search completed but returned no results. Try rephrasing your query.";
+    }
+
+    res.status(502).json({ error: userMessage });
   }
 });
 

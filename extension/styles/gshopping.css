@@ -1,0 +1,151 @@
+/* ---------------------------------------------------------------------------
+   Google Shopping — "Try It On" button on product cards
+   --------------------------------------------------------------------------- */
+.nova-gshopping-tryon-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 999;
+  background: linear-gradient(135deg, #FF9900 0%, #FF6600 100%);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.15s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+}
+
+*:hover > .nova-gshopping-tryon-btn,
+.nova-gshopping-tryon-btn:focus {
+  opacity: 1;
+}
+
+.nova-gshopping-tryon-btn:hover {
+  transform: scale(1.05);
+  background: linear-gradient(135deg, #FFa722 0%, #FF7711 100%);
+}
+
+.nova-gshopping-tryon-btn:disabled {
+  opacity: 1;
+  background: #888;
+  cursor: wait;
+}
+
+/* ---------------------------------------------------------------------------
+   Result Lightbox
+   --------------------------------------------------------------------------- */
+.nova-gshopping-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+}
+
+.nova-gshopping-lightbox-inner {
+  position: relative;
+  background: #fff;
+  border-radius: 16px;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+.nova-gshopping-lightbox-close {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 2;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  font-size: 20px;
+  line-height: 30px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.nova-gshopping-lightbox-close:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.nova-gshopping-lightbox-img {
+  width: 100%;
+  display: block;
+  border-radius: 16px 16px 0 0;
+  max-height: 60vh;
+  object-fit: contain;
+  background: #f5f5f5;
+}
+
+.nova-gshopping-lightbox-info {
+  padding: 16px 20px 20px;
+}
+
+.nova-gshopping-lightbox-info h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.nova-gshopping-lightbox-price {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #FF6600;
+}
+
+.nova-gshopping-lightbox-tips {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: #666;
+  line-height: 1.4;
+}
+
+.nova-gshopping-lightbox-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.nova-gshopping-lightbox-actions a,
+.nova-gshopping-lightbox-actions button {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  border: 1.5px solid #ddd;
+  background: #fff;
+  color: #333;
+  transition: background 0.15s;
+}
+
+.nova-gshopping-lightbox-actions a:hover,
+.nova-gshopping-lightbox-actions button:hover {
+  background: #f5f5f5;
+}
+
+.nova-gshopping-btn-fav {
+  background: linear-gradient(135deg, #FF9900, #FF6600) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+
+.nova-gshopping-btn-fav:hover {
+  background: linear-gradient(135deg, #FFa722, #FF7711) !important;
+}

@@ -5,7 +5,7 @@
 
 const MAX_IMAGE_DIMENSION = 1024;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const DEFAULT_BACKEND_URL = 'http://localhost:3000';
+const DEFAULT_BACKEND_URL = 'http://98.91.240.78';
 
 // State
 let pendingSignupEmail = '';
@@ -17,6 +17,15 @@ let userPhotos = { body: [null, null, null], face: [null, null] };
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function buildProductUrl(item) {
+  if (item.productUrl) return item.productUrl;
+  // Legacy fallback: Amazon items stored with asin only
+  const id = item.productId || item.asin;
+  if (!id) return '#';
+  if (!item.retailer || item.retailer === 'amazon') return `https://www.amazon.com/dp/${id}`;
+  return '#';
+}
 
 function showView(viewId) {
   document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
@@ -48,6 +57,36 @@ function showToast(msg, duration = 3000) {
   toast.textContent = msg;
   toast.classList.add('show');
   setTimeout(() => { toast.classList.remove('show'); }, duration);
+}
+
+function launchConfetti() {
+  const container = document.createElement('div');
+  container.className = 'confetti-container';
+  document.body.appendChild(container);
+
+  const colors = ['#FF9900', '#E88B00', '#FFB84D', '#FF6600', '#00c853', '#2979ff', '#ff4081', '#aa00ff'];
+  const shapes = ['square', 'circle'];
+
+  for (let i = 0; i < 80; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const shape = shapes[Math.floor(Math.random() * shapes.length)];
+    const left = Math.random() * 100;
+    const delay = Math.random() * 1.5;
+    const size = 6 + Math.random() * 6;
+
+    piece.style.left = left + '%';
+    piece.style.width = size + 'px';
+    piece.style.height = size + 'px';
+    piece.style.background = color;
+    piece.style.borderRadius = shape === 'circle' ? '50%' : '2px';
+    piece.style.animationDelay = delay + 's';
+    piece.style.animationDuration = (2 + Math.random() * 2) + 's';
+    container.appendChild(piece);
+  }
+
+  setTimeout(() => container.remove(), 5000);
 }
 
 function sendMsg(msg) {
@@ -526,6 +565,23 @@ async function showFavoritesView() {
     container.innerHTML = '<div class="favorites-list" id="favoritesList"></div>';
     const list = document.getElementById('favoritesList');
 
+    // Cart selection state: Map of cardId → [productUrl, ...]
+    const cartSelection = new Map();
+    let cardIdCounter = 0;
+
+    function updateCartBar() {
+      const bar = document.getElementById('favCartBar');
+      const countEl = document.getElementById('favCartCount');
+      let totalItems = 0;
+      cartSelection.forEach(urls => { totalItems += urls.length; });
+      if (totalItems > 0) {
+        bar.hidden = false;
+        countEl.textContent = `${totalItems} item${totalItems > 1 ? 's' : ''} selected`;
+      } else {
+        bar.hidden = true;
+      }
+    }
+
     renderList.forEach((entry) => {
       if (entry.type === 'outfit') {
         renderOutfitCard(list, container, entry.items);
@@ -534,31 +590,100 @@ async function showFavoritesView() {
       }
     });
 
+    // Cart button handler — calls local Nova Act cart server (localhost:7860)
+    document.getElementById('favCartBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('favCartBtn');
+      const allUrls = [];
+      cartSelection.forEach(urls => { allUrls.push(...urls); });
+      if (allUrls.length === 0) return;
+
+      btn.disabled = true;
+      btn.textContent = 'Adding to cart...';
+
+      try {
+        // Call the local Nova Act cart server running on user's machine
+        const resp = await fetch('http://localhost:7860/add-to-cart', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productUrls: allUrls }),
+        });
+        const result = await resp.json();
+        console.log('[popup] Add to cart result:', result);
+
+        if (result.status === 'success') {
+          showToast('Items added to shopping cart successfully!', 4000);
+        } else if (result.status === 'partial') {
+          showToast(result.message || 'Some items could not be added to cart.', 4000);
+        } else {
+          throw new Error(result.error || 'Unknown error');
+        }
+        // Clear selection
+        cartSelection.clear();
+        document.querySelectorAll('.fav-card-checkbox').forEach(cb => {
+          cb.checked = false;
+          const card = cb.closest('.fav-card, .fav-outfit-card');
+          if (card) card.classList.remove('fav-card-selected');
+        });
+        updateCartBar();
+      } catch (err) {
+        console.error('[popup] Add to cart failed:', err);
+        if (err.message && err.message.includes('Failed to fetch')) {
+          showToast('Cart server not running. Start it with: python3 cart_server.py', 5000);
+        } else {
+          showToast('Failed to add items to cart. Please try again.', 4000);
+        }
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Add to Shopping Cart';
+      }
+    });
+
     function renderSoloCard(list, container, fav) {
       const card = document.createElement('div');
       card.className = 'fav-card';
+      const cardId = 'favCard_' + (cardIdCounter++);
 
       const productImg = fav.productImage || '';
       const hasTryOnKey = !!fav.tryOnResultKey;
       const title = fav.productTitle || fav.asin || 'Unknown product';
       const category = fav.category || fav.garmentClass || '';
       const date = fav.savedAt ? new Date(fav.savedAt).toLocaleDateString() : '';
+      const retailerLabels = { amazon: 'Amazon', shein: 'Shein', temu: 'Temu', google_shopping: 'Google Shopping' };
+      const retailerName = retailerLabels[fav.retailer] || (fav.productUrl && !fav.productUrl.includes('amazon.com') ? 'Other' : 'Amazon');
+      const productUrl = buildProductUrl(fav);
 
       card.innerHTML = `
+        <input type="checkbox" class="fav-card-checkbox" data-card-id="${cardId}" title="Select for cart">
         <div class="fav-card-images">
           ${hasTryOnKey ? `<img class="fav-card-img fav-card-tryon" id="tryonImg_${fav.asin}" src="" alt="Try-on" style="display:none">` : ''}
           ${productImg ? `<img class="fav-card-img fav-card-product" src="${productImg}" alt="Product">` : ''}
         </div>
         <div class="fav-card-body">
+          <span class="fav-card-retailer fav-retailer-${(fav.retailer || 'amazon').replace('_', '-')}">${retailerName}</span>
           <div class="fav-card-title">${title}</div>
           <div class="fav-card-meta">${[category, date].filter(Boolean).join(' · ')}</div>
         </div>
         <button class="fav-card-remove" title="Remove" data-asin="${fav.asin}">&times;</button>
       `;
 
+      // Checkbox handler
+      const checkbox = card.querySelector('.fav-card-checkbox');
+      checkbox.addEventListener('click', (e) => { e.stopPropagation(); });
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked && productUrl !== '#') {
+          cartSelection.set(cardId, [productUrl]);
+          card.classList.add('fav-card-selected');
+        } else {
+          cartSelection.delete(cardId);
+          card.classList.remove('fav-card-selected');
+        }
+        updateCartBar();
+      });
+
       card.addEventListener('click', (e) => {
-        if (e.target.classList.contains('fav-card-remove')) return;
-        if (fav.asin) chrome.tabs.create({ url: `https://www.amazon.com/dp/${fav.asin}` });
+        if (e.target.classList.contains('fav-card-remove') || e.target.classList.contains('fav-card-checkbox')) return;
+        const url = buildProductUrl(fav);
+        if (url !== '#') chrome.tabs.create({ url });
       });
 
       const removeBtn = card.querySelector('.fav-card-remove');
@@ -580,6 +705,7 @@ async function showFavoritesView() {
     function renderOutfitCard(list, container, items) {
       const card = document.createElement('div');
       card.className = 'fav-outfit-card';
+      const cardId = 'favCard_' + (cardIdCounter++);
 
       const date = items[0].savedAt ? new Date(items[0].savedAt).toLocaleDateString() : '';
       // Use first item's try-on image (all share the same result)
@@ -594,11 +720,16 @@ async function showFavoritesView() {
         </div>`;
       }).join('');
 
+      // Collect all product URLs for this outfit
+      const outfitUrls = items.map(i => buildProductUrl(i)).filter(u => u !== '#');
+
       card.innerHTML = `
+        <input type="checkbox" class="fav-card-checkbox" data-card-id="${cardId}" title="Select all ${items.length} items for cart">
         <div class="fav-outfit-images">
           ${tryOnImgId ? `<img class="fav-card-img fav-card-tryon" id="${tryOnImgId}" src="" alt="Try-on" style="display:none">` : ''}
         </div>
         <div class="fav-card-body">
+          <span class="fav-card-retailer fav-retailer-amazon">Amazon</span>
           <div class="fav-card-title">Outfit (${items.length} items)</div>
           <div class="fav-outfit-items">${itemRows}</div>
           <div class="fav-card-meta">${date}</div>
@@ -606,13 +737,28 @@ async function showFavoritesView() {
         <button class="fav-outfit-remove" title="Remove outfit">&times;</button>
       `;
 
-      // Click product row (thumb + link) → open that item on Amazon
+      // Checkbox handler — selects all items in the outfit
+      const checkbox = card.querySelector('.fav-card-checkbox');
+      checkbox.addEventListener('click', (e) => { e.stopPropagation(); });
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked && outfitUrls.length > 0) {
+          cartSelection.set(cardId, outfitUrls);
+          card.classList.add('fav-card-selected');
+        } else {
+          cartSelection.delete(cardId);
+          card.classList.remove('fav-card-selected');
+        }
+        updateCartBar();
+      });
+
+      // Click product row (thumb + link) → open that item
       card.querySelectorAll('.fav-outfit-row').forEach(el => {
         el.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
-          const asin = el.dataset.asin;
-          if (asin) chrome.tabs.create({ url: `https://www.amazon.com/dp/${asin}` });
+          const item = items.find(i => i.asin === el.dataset.asin) || { asin: el.dataset.asin };
+          const url = buildProductUrl(item);
+          if (url !== '#') chrome.tabs.create({ url });
         });
       });
 
@@ -709,18 +855,19 @@ async function showVideosView() {
             </div>
           </div>
           <div class="video-card-actions">
-            ${video.asin ? `<a class="video-card-link" href="#" data-asin="${video.asin}">View on Amazon</a>` : ''}
+            ${video.asin ? `<a class="video-card-link" href="#" data-asin="${video.asin}">View Product</a>` : ''}
             <button class="video-card-delete" title="Remove video" data-video-id="${video.videoId}">&times;</button>
           </div>
         </div>
       `;
 
-      // Click Amazon link
-      const amazonLink = card.querySelector('.video-card-link');
-      if (amazonLink) {
-        amazonLink.addEventListener('click', (e) => {
+      // Click product link
+      const productLink = card.querySelector('.video-card-link');
+      if (productLink) {
+        productLink.addEventListener('click', (e) => {
           e.preventDefault();
-          chrome.tabs.create({ url: `https://www.amazon.com/dp/${amazonLink.dataset.asin}` });
+          const url = buildProductUrl(video);
+          if (url !== '#') chrome.tabs.create({ url });
         });
       }
 
@@ -762,6 +909,10 @@ async function showEditProfile() {
     document.getElementById('editCity').value = cachedProfile.city || '';
     document.getElementById('editClothesSize').value = cachedProfile.clothesSize || '';
     document.getElementById('editShoesSize').value = cachedProfile.shoesSize || '';
+    // Language: prefer DynamoDB profile, fallback to chrome.storage.local
+    chrome.storage.local.get(['stellaLanguage'], (result) => {
+      document.getElementById('editLanguage').value = cachedProfile.language || result.stellaLanguage || 'en';
+    });
     if (cachedProfile.birthday) {
       const age = calculateAge(cachedProfile.birthday);
       document.getElementById('editAgeDisplay').textContent = age > 0 ? `Age: ${age}` : '';
@@ -801,6 +952,7 @@ async function handleEditSaveInfo() {
   const city = document.getElementById('editCity').value.trim();
   const clothesSize = document.getElementById('editClothesSize').value;
   const shoesSize = document.getElementById('editShoesSize').value;
+  const language = document.getElementById('editLanguage').value || 'en';
 
   if (!firstName || !lastName) {
     showToast('Please enter your first and last name.');
@@ -811,8 +963,14 @@ async function handleEditSaveInfo() {
   try {
     await sendMsg({
       type: 'API_CALL', endpoint: '/api/profile', method: 'PUT',
-      data: { firstName, lastName, birthday, sex, country, city, clothesSize, shoesSize }
+      data: { firstName, lastName, birthday, sex, country, city, clothesSize, shoesSize, language }
     });
+    // Update cached profile so Stella and other features use the new values
+    if (cachedProfile) {
+      Object.assign(cachedProfile, { firstName, lastName, birthday, sex, country, city, clothesSize, shoesSize, language });
+    }
+    // Persist language locally so Stella uses it even before backend deploy
+    chrome.storage.local.set({ stellaLanguage: language });
     showToast('Profile updated successfully');
   } catch (err) {
     showToast('Failed to save: ' + err.message);
@@ -914,6 +1072,7 @@ async function handleWizard1Next() {
   const city = document.getElementById('city').value.trim();
   const clothesSize = document.getElementById('clothesSize').value;
   const shoesSize = document.getElementById('shoesSize').value;
+  const language = document.getElementById('language').value || 'en';
 
   if (!firstName || !lastName || !birthday || !sex || !country || !city || !clothesSize || !shoesSize) {
     showToast('Please fill in all fields.');
@@ -923,8 +1082,9 @@ async function handleWizard1Next() {
   try {
     await sendMsg({
       type: 'API_CALL', endpoint: '/api/profile', method: 'PUT',
-      data: { firstName, lastName, birthday, sex, country, city, clothesSize, shoesSize }
+      data: { firstName, lastName, birthday, sex, country, city, clothesSize, shoesSize, language }
     });
+    chrome.storage.local.set({ stellaLanguage: language });
     // Open as a full tab for photo upload (popup closes when file dialogs open)
     openAsTab('wizard2');
   } catch (err) {
@@ -1050,6 +1210,9 @@ async function handleWizard2Next() {
     const successEl = document.getElementById('genSuccess');
     if (successEl) successEl.hidden = false;
     document.getElementById('wizard3Done').hidden = false;
+
+    // Celebrate with confetti!
+    launchConfetti();
   } catch (err) {
     showError('genError', 'Generation failed: ' + err.message);
     // Mark all steps as error
@@ -1213,16 +1376,24 @@ async function init() {
     });
   });
 
-  // Smart Search / Outfit Builder tab switching
+  // Smart Search / Outfit Builder / Voice Agent tab switching
   document.querySelectorAll('.search-mode-tab').forEach((tab) => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.search-mode-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
-      const isSingle = tab.dataset.mode === 'single';
-      document.getElementById('panelSmartSearch').classList.toggle('hidden', !isSingle);
-      document.getElementById('panelOutfitBuilder').classList.toggle('hidden', isSingle);
+      const mode = tab.dataset.mode;
+      document.getElementById('panelSmartSearch').classList.toggle('hidden', mode !== 'single');
+      document.getElementById('panelOutfitBuilder').classList.toggle('hidden', mode !== 'outfit');
+      document.getElementById('panelCosmetics').classList.toggle('hidden', mode !== 'cosmetics');
+      document.getElementById('panelVoiceAgent').classList.toggle('hidden', mode !== 'voice');
     });
   });
+
+  // Stella Voice Agent — inline in side panel
+  initStella();
+
+  // Cosmetics / Beauty Try-On
+  initCosmetics();
 
   document.getElementById('smartSearchBtn').addEventListener('click', handleSmartSearch);
   document.getElementById('smartSearchInput').addEventListener('keydown', (e) => {
@@ -1234,6 +1405,9 @@ async function init() {
     const top = document.getElementById('outfitTop').value.trim();
     const bottom = document.getElementById('outfitBottom').value.trim();
     const shoes = document.getElementById('outfitShoes').value.trim();
+    const necklace = document.getElementById('outfitNecklace').value.trim();
+    const earrings = document.getElementById('outfitEarrings').value.trim();
+    const bracelets = document.getElementById('outfitBracelets').value.trim();
     const errorEl = document.getElementById('outfitBuildError');
     errorEl.textContent = '';
     if (!top && !bottom) {
@@ -1244,6 +1418,9 @@ async function init() {
     if (top) outfitParams.set('top', top);
     if (bottom) outfitParams.set('bottom', bottom);
     if (shoes) outfitParams.set('shoes', shoes);
+    if (necklace) outfitParams.set('necklace', necklace);
+    if (earrings) outfitParams.set('earrings', earrings);
+    if (bracelets) outfitParams.set('bracelets', bracelets);
     if (cachedProfile?.clothesSize) outfitParams.set('clothesSize', cachedProfile.clothesSize);
     if (cachedProfile?.shoesSize) outfitParams.set('shoesSize', cachedProfile.shoesSize);
     if (cachedProfile?.sex) outfitParams.set('sex', cachedProfile.sex);
@@ -1330,27 +1507,43 @@ async function init() {
         await loadProfileAndRoute();
       }
     } else if (authData.authTokens.refreshToken) {
-      // Try refresh
-      try {
-        const newTokens = await sendMsg({
-          type: 'API_CALL', endpoint: '/api/auth/refresh', method: 'POST',
-          data: { refreshToken: authData.authTokens.refreshToken }
-        });
-        await chrome.storage.local.set({
-          authTokens: {
-            ...authData.authTokens,
-            idToken: newTokens.idToken,
-            accessToken: newTokens.accessToken,
-            expiresAt: Date.now() + (newTokens.expiresIn * 1000),
-          }
-        });
+      // Try refresh — with retry on transient failure
+      let refreshed = false;
+      for (let attempt = 0; attempt < 2 && !refreshed; attempt++) {
+        try {
+          const newTokens = await sendMsg({
+            type: 'API_CALL', endpoint: '/api/auth/refresh', method: 'POST',
+            data: { refreshToken: authData.authTokens.refreshToken }
+          });
+          await chrome.storage.local.set({
+            authTokens: {
+              ...authData.authTokens,
+              idToken: newTokens.idToken,
+              accessToken: newTokens.accessToken,
+              expiresAt: Date.now() + (newTokens.expiresIn * 1000),
+            }
+          });
+          refreshed = true;
+        } catch (e) {
+          console.warn(`[popup] Token refresh attempt ${attempt + 1} failed:`, e);
+          if (attempt === 0) await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+      if (refreshed) {
         if (forceStep) {
           showView('view' + forceStep[0].toUpperCase() + forceStep.slice(1));
         } else {
           await loadProfileAndRoute();
         }
-      } catch (_) {
-        showView('viewSignIn');
+      } else {
+        // Refresh failed but we still have tokens — try loading profile anyway
+        // (the background.js will handle refresh on actual API calls)
+        console.warn('[popup] Token refresh failed, attempting to load profile with existing tokens');
+        try {
+          await loadProfileAndRoute();
+        } catch (_) {
+          showView('viewSignIn');
+        }
       }
     } else {
       showView('viewSignIn');
@@ -1363,3 +1556,417 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// ==========================================================================
+// Cosmetics / Beauty Try-On
+// ==========================================================================
+function initCosmetics() {
+  let selectedFaceIndex = 0;
+  const faceSelector = document.getElementById('cosmeticFaceSelector');
+  if (!faceSelector) return;
+
+  // Load face photos from profile
+  (async () => {
+    try {
+      const allPhotos = await new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({
+          type: 'API_CALL', endpoint: '/api/profile/photos/all', method: 'GET', data: {}
+        }, (resp) => {
+          if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+          if (resp && resp.error) return reject(new Error(resp.error));
+          resolve(resp?.data || resp);
+        });
+      });
+
+      // Face photos are at indices 3 and 4 of originals
+      const facePhotos = (allPhotos.originals || []).slice(3, 5).filter(Boolean);
+      if (facePhotos.length === 0) {
+        faceSelector.innerHTML = '<p class="cosmetics-face-loading">No face photos uploaded yet. Go to profile to add them.</p>';
+        return;
+      }
+
+      // Load stored face index preference
+      const stored = await chrome.storage.local.get(['selectedFaceIndex']);
+      const storedIdx = stored.selectedFaceIndex || 0;
+      selectedFaceIndex = Math.min(storedIdx, facePhotos.length - 1);
+
+      faceSelector.innerHTML = '';
+      facePhotos.forEach((photo, i) => {
+        const img = document.createElement('img');
+        img.className = 'cosmetics-face-thumb' + (i === selectedFaceIndex ? ' selected' : '');
+        img.src = `data:image/jpeg;base64,${photo}`;
+        img.title = `Face photo ${i + 1}`;
+        img.addEventListener('click', () => {
+          faceSelector.querySelectorAll('.cosmetics-face-thumb').forEach(t => t.classList.remove('selected'));
+          img.classList.add('selected');
+          selectedFaceIndex = i;
+          chrome.storage.local.set({ selectedFaceIndex: i });
+        });
+        faceSelector.appendChild(img);
+      });
+    } catch (err) {
+      console.error('[Cosmetics] Failed to load face photos:', err);
+      faceSelector.innerHTML = '<p class="cosmetics-face-loading">Could not load face photos</p>';
+    }
+  })();
+}
+
+// ==========================================================================
+// Stella — Inline Voice Agent (Nova 2 Sonic)
+// ==========================================================================
+function initStella() {
+  const BACKEND_URL = DEFAULT_BACKEND_URL;
+  const INPUT_SAMPLE_RATE = 16000;
+  const OUTPUT_SAMPLE_RATE = 24000;
+  const CHUNK_SIZE = 512;
+
+  let socket = null;
+  let mediaStream = null;
+  let audioContext = null;
+  let processorNode = null;
+  let sourceNode = null;
+  let playbackCtx = null;
+  let playbackQueue = [];
+  let isPlaying = false;
+  let isSessionActive = false;
+  let currentPlaybackSource = null;
+
+  const micBtn = document.getElementById('stellaMicBtn');
+  const stopBtn = document.getElementById('stellaStopBtn');
+  const voiceSelect = document.getElementById('stellaVoice');
+  const statusBadge = document.getElementById('stellaStatus');
+  const stateLabel = document.getElementById('stellaState');
+  const orb = document.getElementById('stellaAvatar');
+  const transcript = document.getElementById('stellaTranscript');
+  const toolBar = document.getElementById('stellaToolBar');
+  const toolText = document.getElementById('stellaToolText');
+
+  function setStatus(cls, text) {
+    statusBadge.className = 'stella-status' + (cls ? ' ' + cls : '');
+    statusBadge.textContent = text;
+  }
+
+  function setOrbState(state) {
+    orb.className = 'stella-avatar' + (state ? ' ' + state : '');
+  }
+
+  function appendTranscript(role, text) {
+    if (!text || !text.trim()) return;
+    const placeholder = transcript.querySelector('.stella-placeholder');
+    if (placeholder) placeholder.remove();
+    const msg = document.createElement('div');
+    msg.className = 'stella-msg ' + role;
+    msg.textContent = text;
+    transcript.appendChild(msg);
+    transcript.scrollTop = transcript.scrollHeight;
+  }
+
+  // Socket.IO connection
+  function connectSocket() {
+    if (typeof io === 'undefined') {
+      setStatus('error', 'Error');
+      stateLabel.textContent = 'Socket.IO not loaded';
+      return;
+    }
+    socket = io(BACKEND_URL + '/voice', {
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+    });
+
+    socket.on('connect', () => {
+      console.log('[Stella] Connected:', socket.id);
+      setStatus('connected', 'Connected');
+      stateLabel.textContent = 'Tap mic to talk';
+    });
+
+    socket.on('disconnect', () => {
+      console.log('[Stella] Disconnected');
+      setStatus('', 'Offline');
+      endSession();
+    });
+
+    socket.on('audioOutput', (base64Audio) => {
+      queueAudioForPlayback(base64Audio);
+      setOrbState('speaking');
+    });
+
+    socket.on('textOutput', (data) => {
+      if (data.role === 'ASSISTANT' || data.role === 'assistant') {
+        appendTranscript('assistant', data.text);
+      } else if (data.role === 'USER' || data.role === 'user') {
+        // User started speaking — barge-in: flush Stella's audio
+        flushPlayback();
+        appendTranscript('user', data.text);
+      }
+    });
+
+    socket.on('toolStart', (data) => {
+      toolBar.hidden = false;
+      toolText.textContent = 'Running: ' + data.toolName + '...';
+      setOrbState('thinking');
+    });
+
+    socket.on('toolEnd', () => { toolBar.hidden = true; });
+
+    socket.on('toolAction', (data) => {
+      console.log('[Stella] Tool action:', data);
+      handleToolAction(data);
+    });
+
+    socket.on('error', (data) => {
+      console.error('[Stella] Error:', data.message);
+      const isTimeout = data.message && data.message.toLowerCase().includes('timed out');
+      if (isTimeout && isSessionActive) {
+        appendTranscript('system', 'Connection hiccup — reconnecting...');
+        setStatus('', 'Reconnecting...');
+        // Auto-restart session after a brief delay
+        setTimeout(async () => {
+          try {
+            isSessionActive = false;
+            if (socket && socket.connected) socket.emit('endSession');
+            await startSession();
+            appendTranscript('system', 'Stella is back and listening!');
+          } catch (err) {
+            console.error('[Stella] Auto-restart failed:', err);
+            appendTranscript('system', 'Reconnect failed: ' + err.message);
+            setStatus('error', 'Error');
+          }
+        }, 1500);
+      } else {
+        appendTranscript('system', 'Error: ' + data.message);
+        setStatus('error', 'Error');
+      }
+    });
+  }
+
+  // Forward search/outfit results from extension tabs to voice socket
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.type === 'SEARCH_RESULTS_LOADED' && socket && socket.connected) {
+      socket.emit('searchResultsLoaded', { products: msg.products });
+      console.log('[Stella] Forwarded search results to voice session:', msg.products?.length);
+    }
+    if (msg.type === 'OUTFIT_RESULTS_LOADED' && socket && socket.connected) {
+      socket.emit('outfitResultsLoaded', { tops: msg.tops, bottoms: msg.bottoms, shoes: msg.shoes });
+      console.log('[Stella] Forwarded outfit results to voice session');
+    }
+  });
+
+  // Audio capture
+  async function startAudioCapture() {
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: { sampleRate: INPUT_SAMPLE_RATE, channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    audioContext = new AudioContext({ sampleRate: INPUT_SAMPLE_RATE });
+    sourceNode = audioContext.createMediaStreamSource(mediaStream);
+    processorNode = audioContext.createScriptProcessor(CHUNK_SIZE, 1, 1);
+
+    processorNode.onaudioprocess = (e) => {
+      if (!isSessionActive || !socket) return;
+      const float32 = e.inputBuffer.getChannelData(0);
+      const int16 = new Int16Array(float32.length);
+      for (let i = 0; i < float32.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32[i]));
+        int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+      const bytes = new Uint8Array(int16.buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      socket.emit('audioInput', btoa(binary));
+    };
+
+    sourceNode.connect(processorNode);
+    processorNode.connect(audioContext.destination);
+  }
+
+  function stopAudioCapture() {
+    if (processorNode) { processorNode.disconnect(); processorNode = null; }
+    if (sourceNode) { sourceNode.disconnect(); sourceNode = null; }
+    if (audioContext) { audioContext.close(); audioContext = null; }
+    if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+  }
+
+  // Audio playback
+  function queueAudioForPlayback(base64Audio) {
+    const binaryStr = atob(base64Audio);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+    const int16 = new Int16Array(bytes.buffer);
+    const float32 = new Float32Array(int16.length);
+    for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
+    playbackQueue.push(float32);
+    if (!isPlaying) playNextChunk();
+  }
+
+  function flushPlayback() {
+    playbackQueue = [];
+    if (currentPlaybackSource) {
+      try { currentPlaybackSource.stop(); } catch (_) {}
+      currentPlaybackSource = null;
+    }
+    isPlaying = false;
+    if (isSessionActive) { setOrbState('listening'); setStatus('listening', 'Listening...'); }
+  }
+
+  function playNextChunk() {
+    if (playbackQueue.length === 0) {
+      isPlaying = false;
+      currentPlaybackSource = null;
+      if (isSessionActive) { setOrbState('listening'); setStatus('listening', 'Listening...'); }
+      return;
+    }
+    isPlaying = true;
+    if (!playbackCtx) playbackCtx = new AudioContext({ sampleRate: OUTPUT_SAMPLE_RATE });
+    const samples = playbackQueue.shift();
+    const buffer = playbackCtx.createBuffer(1, samples.length, OUTPUT_SAMPLE_RATE);
+    buffer.getChannelData(0).set(samples);
+    const source = playbackCtx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(playbackCtx.destination);
+    source.onended = () => { currentPlaybackSource = null; playNextChunk(); };
+    currentPlaybackSource = source;
+    source.start();
+  }
+
+  // Session management
+  async function startSession() {
+    if (isSessionActive) return;
+    try {
+      setStatus('', 'Connecting...');
+      stateLabel.textContent = 'Connecting to Stella...';
+      if (!socket || !socket.connected) connectSocket();
+      // Wait for connection
+      if (!socket.connected) {
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Connection timeout')), 5000);
+          socket.once('connect', () => { clearTimeout(timeout); resolve(); });
+        });
+      }
+      await startAudioCapture();
+      const voiceId = voiceSelect.value;
+      // Language priority: DynamoDB profile (via cachedProfile) > chrome.storage fallback > English
+      const langStorage = await new Promise(r => chrome.storage.local.get(['stellaLanguage'], r));
+      const userLang = (cachedProfile && cachedProfile.language) || langStorage.stellaLanguage || 'en';
+      // Get auth token for userId extraction
+      const authStorage = await new Promise(r => chrome.storage.local.get(['authTokens'], r));
+      const authToken = authStorage?.authTokens?.idToken || null;
+      await new Promise((resolve, reject) => {
+        socket.emit('startSession', {
+        voiceId,
+        language: userLang,
+        authToken,
+        sex: cachedProfile?.sex || null,
+        clothesSize: cachedProfile?.clothesSize || null,
+        shoesSize: cachedProfile?.shoesSize || null,
+      }, (response) => {
+          if (response.status === 'ok') resolve();
+          else reject(new Error(response.message || 'Failed to start session'));
+        });
+      });
+      isSessionActive = true;
+      micBtn.classList.add('active');
+      micBtn.hidden = true;
+      stopBtn.hidden = false;
+      voiceSelect.disabled = true;
+      setOrbState('listening');
+      setStatus('listening', 'Listening...');
+      stateLabel.textContent = 'Speak naturally';
+      transcript.innerHTML = '';
+      appendTranscript('system', 'Stella is listening...');
+    } catch (err) {
+      console.error('[Stella] Failed to start:', err);
+      setStatus('error', 'Error');
+      stateLabel.textContent = err.message;
+      stopAudioCapture();
+    }
+  }
+
+  function endSession() {
+    if (!isSessionActive) return;
+    isSessionActive = false;
+    stopAudioCapture();
+    playbackQueue = [];
+    isPlaying = false;
+    if (playbackCtx) { playbackCtx.close(); playbackCtx = null; }
+    if (socket && socket.connected) socket.emit('endSession');
+    micBtn.classList.remove('active');
+    micBtn.hidden = false;
+    stopBtn.hidden = true;
+    voiceSelect.disabled = false;
+    setOrbState('');
+    setStatus('connected', 'Connected');
+    stateLabel.textContent = 'Tap mic to talk';
+    toolBar.hidden = true;
+    appendTranscript('system', 'Session ended.');
+  }
+
+  // Tool action handler
+  function handleToolAction(data) {
+    if (typeof chrome !== 'undefined' && chrome.runtime) {
+      switch (data.action) {
+        case 'smart_search':
+          chrome.runtime.sendMessage({ type: 'VOICE_SMART_SEARCH', query: data.query });
+          appendTranscript('system', 'Searching: "' + data.query + '"');
+          break;
+        case 'try_on':
+          chrome.runtime.sendMessage({ type: 'VOICE_TRY_ON', productTitle: data.productTitle, productUrl: data.productUrl });
+          appendTranscript('system', 'Try-on: "' + data.productTitle + '"');
+          break;
+        case 'build_outfit':
+          chrome.runtime.sendMessage({ type: 'VOICE_BUILD_OUTFIT', top: data.top, bottom: data.bottom, shoes: data.shoes, necklace: data.necklace, earrings: data.earrings, bracelets: data.bracelets });
+          appendTranscript('system', 'Building outfit...');
+          break;
+        case 'add_to_cart':
+          chrome.runtime.sendMessage({ type: 'VOICE_ADD_TO_CART', productUrl: data.productUrl, productTitle: data.productTitle });
+          appendTranscript('system', 'Adding to cart: ' + (data.productTitle || data.productUrl));
+          break;
+        case 'save_favorite':
+          chrome.runtime.sendMessage({ type: 'VOICE_SAVE_FAVORITE' });
+          appendTranscript('system', 'Saving to favorites...');
+          break;
+        case 'save_video':
+          chrome.runtime.sendMessage({ type: 'VOICE_SAVE_VIDEO' });
+          appendTranscript('system', 'Saving video...');
+          break;
+        case 'animate_tryon':
+          chrome.runtime.sendMessage({ type: 'VOICE_ANIMATE' });
+          appendTranscript('system', 'Generating animation...');
+          break;
+        case 'download':
+          chrome.runtime.sendMessage({ type: 'VOICE_DOWNLOAD', downloadType: data.downloadType || 'image' });
+          appendTranscript('system', 'Downloading ' + (data.downloadType || 'image') + '...');
+          break;
+        case 'send_tryon':
+          chrome.runtime.sendMessage({ type: 'VOICE_SEND' });
+          appendTranscript('system', 'Sharing try-on result...');
+          break;
+        case 'select_search_item':
+          chrome.runtime.sendMessage({ type: 'VOICE_SELECT_SEARCH_ITEM', number: data.number });
+          appendTranscript('system', 'Selecting item #' + data.number + ' for try-on...');
+          break;
+        case 'select_outfit_items':
+          chrome.runtime.sendMessage({
+            type: 'VOICE_SELECT_OUTFIT_ITEMS',
+            topNumber: data.topNumber || null,
+            bottomNumber: data.bottomNumber || null,
+            shoesNumber: data.shoesNumber || null,
+          });
+          {
+            const selParts = [];
+            if (data.topNumber) selParts.push('top #' + data.topNumber);
+            if (data.bottomNumber) selParts.push('bottom #' + data.bottomNumber);
+            if (data.shoesNumber) selParts.push('shoes #' + data.shoesNumber);
+            appendTranscript('system', 'Selecting ' + selParts.join(', ') + ' for try-on...');
+          }
+          break;
+      }
+    }
+  }
+
+  // Event listeners
+  micBtn.addEventListener('click', startSession);
+  stopBtn.addEventListener('click', endSession);
+
+  // Auto-connect on load
+  connectSocket();
+}

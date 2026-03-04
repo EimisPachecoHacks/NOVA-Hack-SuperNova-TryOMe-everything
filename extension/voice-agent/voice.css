@@ -1,0 +1,291 @@
+/* Nova Voice Agent — Dark theme matching extension style */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.va-container {
+  width: 480px;
+  max-width: 95vw;
+  background: linear-gradient(145deg, #16213e, #1a1a2e);
+  border-radius: 24px;
+  border: 1px solid rgba(255, 153, 0, 0.15);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* Header */
+.va-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.va-logo {
+  font-size: 18px;
+  font-weight: 700;
+  color: #FF9900;
+}
+
+.va-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #888;
+}
+
+.va-status.connected {
+  background: rgba(76, 175, 80, 0.15);
+  color: #66BB6A;
+}
+
+.va-status.listening {
+  background: rgba(255, 153, 0, 0.15);
+  color: #FF9900;
+}
+
+.va-status.speaking {
+  background: rgba(79, 195, 247, 0.15);
+  color: #4FC3F7;
+}
+
+.va-status.error {
+  background: rgba(244, 67, 54, 0.15);
+  color: #ef5350;
+}
+
+/* Visualizer */
+.va-visualizer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px 24px;
+  min-height: 200px;
+}
+
+.va-orb {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 40%, rgba(255, 153, 0, 0.2), rgba(255, 153, 0, 0.05));
+  border: 2px solid rgba(255, 153, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.va-orb.listening {
+  border-color: rgba(255, 153, 0, 0.6);
+  box-shadow: 0 0 30px rgba(255, 153, 0, 0.2);
+  animation: pulse-orange 2s ease-in-out infinite;
+}
+
+.va-orb.speaking {
+  border-color: rgba(79, 195, 247, 0.6);
+  background: radial-gradient(circle at 40% 40%, rgba(79, 195, 247, 0.2), rgba(79, 195, 247, 0.05));
+  box-shadow: 0 0 30px rgba(79, 195, 247, 0.2);
+  animation: pulse-blue 1s ease-in-out infinite;
+}
+
+.va-orb.thinking {
+  border-color: rgba(186, 104, 200, 0.6);
+  background: radial-gradient(circle at 40% 40%, rgba(186, 104, 200, 0.2), rgba(186, 104, 200, 0.05));
+  animation: spin-slow 3s linear infinite;
+}
+
+.va-orb-inner {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(255, 153, 0, 0.1);
+  transition: all 0.15s ease;
+}
+
+.va-orb.listening .va-orb-inner {
+  background: rgba(255, 153, 0, 0.3);
+}
+
+.va-orb.speaking .va-orb-inner {
+  background: rgba(79, 195, 247, 0.3);
+}
+
+@keyframes pulse-orange {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+@keyframes pulse-blue {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.va-state-label {
+  margin-top: 16px;
+  font-size: 14px;
+  color: #888;
+  text-align: center;
+}
+
+/* Transcript */
+.va-transcript {
+  flex: 1;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.va-transcript-placeholder {
+  color: #555;
+  font-size: 13px;
+  text-align: center;
+  padding: 20px 0;
+}
+
+.va-msg {
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 8px 12px;
+  border-radius: 12px;
+  max-width: 85%;
+  word-wrap: break-word;
+}
+
+.va-msg.user {
+  align-self: flex-end;
+  background: rgba(255, 153, 0, 0.12);
+  color: #FFB84D;
+  border: 1px solid rgba(255, 153, 0, 0.2);
+}
+
+.va-msg.assistant {
+  align-self: flex-start;
+  background: rgba(79, 195, 247, 0.08);
+  color: #b0d4e8;
+  border: 1px solid rgba(79, 195, 247, 0.15);
+}
+
+.va-msg.system {
+  align-self: center;
+  color: #666;
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Tool bar */
+.va-tool-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  background: rgba(186, 104, 200, 0.08);
+  border-top: 1px solid rgba(186, 104, 200, 0.15);
+  font-size: 13px;
+  color: #CE93D8;
+}
+
+.va-tool-icon {
+  animation: spin-slow 2s linear infinite;
+}
+
+/* Controls */
+.va-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 20px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.va-voice-select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #ccc;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+}
+
+.va-voice-select:focus {
+  border-color: rgba(255, 153, 0, 0.4);
+}
+
+.va-mic-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 153, 0, 0.4);
+  background: rgba(255, 153, 0, 0.1);
+  color: #FF9900;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.va-mic-btn:hover {
+  background: rgba(255, 153, 0, 0.2);
+  border-color: rgba(255, 153, 0, 0.7);
+  transform: scale(1.05);
+}
+
+.va-mic-btn:active {
+  transform: scale(0.95);
+}
+
+.va-mic-btn.active {
+  background: rgba(255, 153, 0, 0.3);
+  border-color: #FF9900;
+  box-shadow: 0 0 20px rgba(255, 153, 0, 0.3);
+}
+
+.va-stop-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid rgba(244, 67, 54, 0.4);
+  background: rgba(244, 67, 54, 0.1);
+  color: #ef5350;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.va-stop-btn:hover {
+  background: rgba(244, 67, 54, 0.2);
+  border-color: rgba(244, 67, 54, 0.7);
+}
+
+/* Scrollbar */
+.va-transcript::-webkit-scrollbar { width: 4px; }
+.va-transcript::-webkit-scrollbar-track { background: transparent; }
+.va-transcript::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }

@@ -119,6 +119,152 @@ body {
   50% { opacity: 1; box-shadow: 0 0 30px rgba(255,153,0,0.8), 0 10px 60px rgba(255,153,0,0.5); }
 }
 
+/* Ceiling expands when accessories are present */
+.vw-closet .closet-ceiling.has-accessories {
+  height: auto;
+  padding: 0;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Hide default ceiling lights when accessories are showing */
+.vw-closet .closet-ceiling.has-accessories #ceilingLightsDefault {
+  display: none;
+}
+
+/* Ceiling lights row — keeps the 3 orange bars together */
+.ceiling-lights-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20%;
+  padding: 8px 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Accessory bar — vertical stack: labels → orange bars → items
+   --------------------------------------------------------------------------- */
+.accessory-bar {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 4px 0 6px;
+}
+
+/* Labels row — 3 evenly spaced labels above the orange bars */
+.accessory-labels-row {
+  display: flex;
+  justify-content: space-around;
+  padding: 0 12px;
+}
+.accessory-shelf-label {
+  flex: 1;
+  color: #FF9900;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  text-align: center;
+  text-shadow: 0 0 8px rgba(255,153,0,0.4);
+}
+
+/* Items row — 3 columns with dividers */
+.accessory-items-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  width: 100%;
+  padding: 0 12px;
+  align-items: start;
+}
+.accessory-divider {
+  width: 1px;
+  align-self: stretch;
+  background: linear-gradient(180deg, transparent, rgba(255,153,0,0.4), transparent);
+  margin: 4px 0;
+}
+.accessory-shelf {
+  padding: 0 6px;
+}
+.accessory-shelf-items {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #FF9900 #1a1a1a;
+  padding: 2px 0;
+}
+
+.accessory-item {
+  position: relative;
+  flex: 0 0 auto;
+  width: 76px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transition: transform 0.2s;
+}
+.accessory-item:hover { transform: translateY(-2px); }
+.accessory-item-img {
+  width: 68px;
+  height: 68px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #111;
+  border: 2px solid rgba(255,153,0,0.15);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.accessory-item-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 2px;
+}
+.accessory-item.selected .accessory-item-img {
+  border-color: #FF9900;
+  box-shadow: 0 0 12px rgba(255,153,0,0.4);
+}
+.accessory-item-title {
+  font-size: 7px;
+  color: #aaa;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60px;
+}
+.accessory-item-price {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  background: rgba(0,0,0,0.75);
+  color: #FF9900;
+  font-size: 7px;
+  font-weight: 600;
+  padding: 1px 3px;
+  border-radius: 3px;
+  z-index: 3;
+}
+.accessory-number-badge {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  background: linear-gradient(135deg, #FF9900, #E88B00);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 700;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
 /* ---------------------------------------------------------------------------
    Walls (left = tops, right = bottoms)
    --------------------------------------------------------------------------- */
@@ -449,18 +595,35 @@ body {
   cursor: default;
 }
 
+.vw-btn-animate {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #4FC3F7, #0288D1);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.2s, transform 0.2s;
+}
+.vw-btn-animate:hover:not(:disabled) { filter: brightness(1.2); transform: translateY(-1px); }
+.vw-btn-animate:disabled { opacity: 0.6; cursor: default; }
+
 .vw-btn-buy {
   padding: 8px 16px;
   background: linear-gradient(135deg, #FF9900, #E88B00);
   color: #fff;
+  border: none;
   border-radius: 20px;
   font-size: 12px;
   font-weight: 600;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
+  cursor: pointer;
+  transition: filter 0.2s, transform 0.2s;
 }
-.vw-btn-buy:hover { filter: brightness(1.1); }
+.vw-btn-buy:hover { filter: brightness(1.1); transform: translateY(-1px); }
 
 /* ---------------------------------------------------------------------------
    Shoe rack (bottom)
@@ -474,6 +637,18 @@ body {
 .vw-closet .shoe-display.selected { background: rgba(255,153,0,0.15); border-color: #FF9900; }
 .vw-closet .shoe-item { width: 100%; height: 80%; display: flex; align-items: center; justify-content: center; }
 .vw-closet .shoe-item img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 5px 10px rgba(0,0,0,0.6)); position: relative; z-index: 2; }
+.vw-closet .shoe-price {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: rgba(0,0,0,0.7);
+  color: #FF9900;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 5px;
+  border-radius: 4px;
+  z-index: 3;
+}
 .vw-closet .shoe-title {
   font-size: 9px;
   color: #ccc;
@@ -577,6 +752,30 @@ body {
 /* ---------------------------------------------------------------------------
    Responsive
    --------------------------------------------------------------------------- */
+/* Item number badges (for voice selection) */
+.item-number-badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 22px;
+  height: 22px;
+  background: linear-gradient(135deg, #FF9900, #E88B00);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.shoe-number-badge {
+  top: 6px;
+  left: 6px;
+}
+
 @media (max-width: 1200px) {
   .vw-closet .closet-room { grid-template-columns: 50% 50%; }
   .vw-closet .closet-center-space { display: none; }

@@ -1,21 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const { S3Client, PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
-const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { generateVideo: grokGenerateVideo, getVideoStatus: grokGetVideoStatus } = require("../services/grok");
 const { requireAuth, optionalAuth } = require("../middleware/auth");
 const { getProfile, getUserVideos, saveVideoRecord, removeVideo } = require("../services/dynamodb");
-
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || "us-east-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    ...(process.env.AWS_SESSION_TOKEN && { sessionToken: process.env.AWS_SESSION_TOKEN }),
-  },
-});
-
-const S3_USER_BUCKET = process.env.S3_USER_BUCKET || "nova-tryonme-users";
+const { s3Client, S3_USER_BUCKET, PutObjectCommand, GetObjectCommand, getSignedUrl } = require("../services/s3");
 
 router.post("/", optionalAuth, async (req, res, next) => {
   try {

@@ -59,6 +59,8 @@ async function addFavorite(userId, favoriteData) {
     asin: favoriteData.asin,
     productTitle: favoriteData.productTitle,
     productImage: favoriteData.productImage,
+    productUrl: favoriteData.productUrl || "",
+    retailer: favoriteData.retailer || "amazon",
     category: favoriteData.category || "",
     garmentClass: favoriteData.garmentClass || "",
     tryOnResultKey: favoriteData.tryOnResultKey || "",
@@ -124,4 +126,12 @@ async function removeVideo(userId, videoId) {
   return { removed: true };
 }
 
-module.exports = { getProfile, putProfile, getFavorites, addFavorite, removeFavorite, isFavorite, getUserVideos, saveVideoRecord, removeVideo };
+async function deleteProfile(userId) {
+  await docClient.send(new DeleteCommand({
+    TableName: PROFILES_TABLE,
+    Key: { userId },
+  }));
+  return { removed: true };
+}
+
+module.exports = { getProfile, putProfile, deleteProfile, getFavorites, addFavorite, removeFavorite, isFavorite, getUserVideos, saveVideoRecord, removeVideo };

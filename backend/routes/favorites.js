@@ -1,20 +1,26 @@
 const express = require("express");
 const router = express.Router();
-const { S3Client, PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
-const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { requireAuth } = require("../middleware/auth");
 const { getFavorites, addFavorite, removeFavorite, isFavorite } = require("../services/dynamodb");
+const { s3Client, S3_USER_BUCKET, GetObjectCommand, PutObjectCommand, getSignedUrl, fetchPhotoFromS3 } = require("../services/s3");
 
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || "us-east-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    ...(process.env.AWS_SESSION_TOKEN && { sessionToken: process.env.AWS_SESSION_TOKEN }),
-  },
-});
+// In-memory presigned URL cache — avoids regenerating 13+ URLs per favorites load
+// TTL: 50 minutes (presigned URLs expire at 60min)
+const presignedUrlCache = new Map(); // key → { url, expiresAt }
+const CACHE_TTL = 50 * 60 * 1000;
 
-const S3_USER_BUCKET = process.env.S3_USER_BUCKET || "nova-tryonme-users";
+async function getCachedPresignedUrl(s3Key) {
+  const cached = presignedUrlCache.get(s3Key);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.url;
+  }
+  const url = await getSignedUrl(s3Client, new GetObjectCommand({
+    Bucket: S3_USER_BUCKET,
+    Key: s3Key,
+  }), { expiresIn: 3600 });
+  presignedUrlCache.set(s3Key, { url, expiresAt: Date.now() + CACHE_TTL });
+  return url;
+}
 
 // GET /api/favorites
 router.get("/", requireAuth, async (req, res, next) => {
@@ -27,10 +33,7 @@ router.get("/", requireAuth, async (req, res, next) => {
       console.log(`[favorites]   asin=${fav.asin} tryOnResultKey="${fav.tryOnResultKey || '(empty)'}"`);
       if (fav.tryOnResultKey) {
         try {
-          fav.tryOnResultUrl = await getSignedUrl(s3Client, new GetObjectCommand({
-            Bucket: S3_USER_BUCKET,
-            Key: fav.tryOnResultKey,
-          }), { expiresIn: 3600 });
+          fav.tryOnResultUrl = await getCachedPresignedUrl(fav.tryOnResultKey);
           console.log(`[favorites]   → presigned URL generated OK`);
         } catch (err) {
           console.error(`[favorites]   → presigned URL FAILED:`, err.message);
@@ -62,7 +65,7 @@ router.get("/:asin", requireAuth, async (req, res, next) => {
 // POST /api/favorites
 router.post("/", requireAuth, async (req, res, next) => {
   try {
-    const { asin, productTitle, productImage, category, garmentClass, tryOnResultImage, outfitId } = req.body;
+    const { asin, productTitle, productImage, productUrl, retailer, category, garmentClass, tryOnResultImage, outfitId } = req.body;
 
     console.log(`[favorites] POST — asin=${asin}, hasProductImage=${!!productImage}, hasTryOnResultImage=${!!tryOnResultImage}, tryOnImageLength=${tryOnResultImage ? tryOnResultImage.length : 0}`);
 
@@ -88,6 +91,8 @@ router.post("/", requireAuth, async (req, res, next) => {
       asin,
       productTitle: productTitle || "",
       productImage: productImage || "",
+      productUrl: productUrl || "",
+      retailer: retailer || "amazon",
       category: category || "",
       garmentClass: garmentClass || "",
       tryOnResultKey,
@@ -105,15 +110,8 @@ router.get("/:asin/image", requireAuth, async (req, res, next) => {
   try {
     const key = `users/${req.userId}/favorites/${req.params.asin}.jpg`;
     console.log(`[favorites] GET IMAGE — key=${key}`);
-    const command = new GetObjectCommand({ Bucket: S3_USER_BUCKET, Key: key });
-    const s3Response = await s3Client.send(command);
-    const chunks = [];
-    for await (const chunk of s3Response.Body) {
-      chunks.push(chunk);
-    }
-    const buffer = Buffer.concat(chunks);
-    const base64 = buffer.toString("base64");
-    console.log(`[favorites] GET IMAGE OK — ${buffer.length} bytes`);
+    const base64 = await fetchPhotoFromS3(key);
+    console.log(`[favorites] GET IMAGE OK — ${base64.length} chars`);
     res.json({ image: base64 });
   } catch (error) {
     console.error(`[favorites] GET IMAGE FAILED:`, error.message);

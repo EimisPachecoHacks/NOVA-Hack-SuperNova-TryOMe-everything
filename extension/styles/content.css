@@ -14,7 +14,7 @@
   --nova-warm: #FF6600;
   --nova-radius: 8px;
   --nova-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  --nova-font: "Amazon Ember", Arial, Helvetica, sans-serif;
+  --nova-font: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
   --nova-z-base: 10000;
 }
 
@@ -179,6 +179,25 @@
   font-size: 13px;
   margin-bottom: 6px;
   color: #c45500;
+}
+
+.nova-tryon-color-recs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.nova-tryon-color-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  background: #fff;
+  border: 1px solid #e0a86e;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8a4500;
+  white-space: nowrap;
 }
 
 /* ---------------------------------------------------------------------------
@@ -362,18 +381,18 @@
   all: initial;
   display: inline-flex !important;
   align-items: center !important;
-  gap: 6px !important;
-  padding: 8px 16px !important;
-  margin-top: 12px !important;
-  background: transparent !important;
-  border: 1.5px solid #e0e0e0 !important;
-  border-radius: 20px !important;
+  gap: 4px !important;
+  padding: 6px 12px !important;
+  margin: 0 !important;
+  background: #fff !important;
+  border: 1.5px solid #ddd !important;
+  border-radius: 6px !important;
   color: #333 !important;
   font-family: system-ui, -apple-system, Arial, sans-serif !important;
-  font-size: 13px !important;
-  font-weight: 500 !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
   cursor: pointer !important;
-  transition: all 0.2s ease !important;
+  transition: all 0.15s ease !important;
 }
 
 .nova-tryon-favorite-btn:hover {
@@ -473,7 +492,7 @@
 }
 
 .nova-tryon-overlay-body .nova-tryon-favorite-btn {
-  margin-top: 6px !important;
+  margin: 0 !important;
 }
 
 .nova-tryon-overlay-body .nova-tryon-animate-btn {
@@ -534,5 +553,39 @@
   border-color: #FF9900;
   background: #FF9900;
   color: #fff;
+}
+
+/* ---------------------------------------------------------------------------
+   Share / Download / Email Buttons
+   --------------------------------------------------------------------------- */
+.nova-tryon-share-row {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin: 8px 0;
+}
+
+.nova-tryon-share-btn {
+  padding: 6px 12px;
+  border: 1.5px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+  color: #333;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: system-ui, -apple-system, Arial, sans-serif;
+}
+
+.nova-tryon-share-btn:hover {
+  border-color: #FF9900;
+  background: #fff8ee;
+  color: #E88B00;
+}
+
+.nova-tryon-share-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 

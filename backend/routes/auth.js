@@ -49,7 +49,7 @@ router.post("/login", async (req, res, next) => {
     const tokens = await signIn(email, password);
     res.json(tokens);
   } catch (error) {
-    if (error.name === "NotAuthorizedException") {
+    if (error.name === "NotAuthorizedException" || error.name === "UserNotFoundException") {
       return res.status(401).json({ error: "Incorrect email or password" });
     }
     if (error.name === "UserNotConfirmedException") {

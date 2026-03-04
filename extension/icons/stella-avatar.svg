@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6C3CE0;stop-opacity:0.2"/>
+      <stop offset="100%" style="stop-color:#3A1C96;stop-opacity:0.12"/>
+    </linearGradient>
+    <linearGradient id="hair" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1A0A2E"/>
+      <stop offset="100%" style="stop-color:#0D0518"/>
+    </linearGradient>
+    <linearGradient id="skin" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#F5D0B0"/>
+      <stop offset="100%" style="stop-color:#E8BA96"/>
+    </linearGradient>
+    <linearGradient id="dress" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7C4DFF"/>
+      <stop offset="100%" style="stop-color:#5C35CC"/>
+    </linearGradient>
+    <linearGradient id="lips" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E8556D"/>
+      <stop offset="100%" style="stop-color:#D44058"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#B388FF;stop-opacity:0.3"/>
+      <stop offset="100%" style="stop-color:#7C4DFF;stop-opacity:0"/>
+    </radialGradient>
+  </defs>
+  <!-- Background circle with purple glow -->
+  <circle cx="60" cy="60" r="58" fill="url(#bg)" stroke="rgba(124,77,255,0.4)" stroke-width="2"/>
+  <circle cx="60" cy="60" r="56" fill="url(#glow)" opacity="0.5"/>
+  <!-- Hair back -->
+  <ellipse cx="60" cy="42" rx="30" ry="32" fill="url(#hair)"/>
+  <!-- Hair flowing sides -->
+  <path d="M30 42 Q28 60, 32 82 Q34 86, 36 82 Q34 62, 34 44 Z" fill="url(#hair)"/>
+  <path d="M90 42 Q92 60, 88 82 Q86 86, 84 82 Q86 62, 86 44 Z" fill="url(#hair)"/>
+  <!-- Neck -->
+  <rect x="52" y="68" width="16" height="14" rx="6" fill="url(#skin)"/>
+  <!-- Shoulders / Dress top -->
+  <path d="M36 80 Q42 74, 52 76 L52 82 L68 82 L68 76 Q78 74, 84 80 Q90 86, 92 100 L92 120 L28 120 L28 100 Q30 86, 36 80 Z" fill="url(#dress)"/>
+  <!-- Neckline V -->
+  <path d="M52 76 Q56 88, 60 92 Q64 88, 68 76" fill="url(#skin)" stroke="url(#dress)" stroke-width="0.5"/>
+  <!-- Face -->
+  <ellipse cx="60" cy="48" rx="22" ry="26" fill="url(#skin)"/>
+  <!-- Hair front (bangs) -->
+  <path d="M38 38 Q42 22, 60 20 Q78 22, 82 38 Q80 30, 72 26 Q66 24, 60 25 Q54 24, 48 26 Q40 30, 38 38 Z" fill="url(#hair)"/>
+  <!-- Hair side wisps -->
+  <path d="M38 38 Q36 44, 37 50 Q39 46, 40 40 Z" fill="url(#hair)"/>
+  <path d="M82 38 Q84 44, 83 50 Q81 46, 80 40 Z" fill="url(#hair)"/>
+  <!-- Eyes -->
+  <ellipse cx="50" cy="44" rx="4.5" ry="3.2" fill="white"/>
+  <ellipse cx="70" cy="44" rx="4.5" ry="3.2" fill="white"/>
+  <circle cx="51" cy="44" r="2.2" fill="#3E2723"/>
+  <circle cx="71" cy="44" r="2.2" fill="#3E2723"/>
+  <circle cx="51.6" cy="43.2" r="0.8" fill="white"/>
+  <circle cx="71.6" cy="43.2" r="0.8" fill="white"/>
+  <!-- Eyebrows -->
+  <path d="M44 39 Q48 36, 54 38" stroke="#3E2723" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <path d="M66 38 Q72 36, 76 39" stroke="#3E2723" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <!-- Eyelashes -->
+  <path d="M45 42 Q44 40, 43 39" stroke="#1A0A2E" stroke-width="0.8" fill="none"/>
+  <path d="M75 42 Q76 40, 77 39" stroke="#1A0A2E" stroke-width="0.8" fill="none"/>
+  <!-- Nose -->
+  <path d="M60 48 Q58 52, 57 54 Q59 55, 60 55 Q61 55, 63 54 Q62 52, 60 48" fill="none" stroke="#D4A57A" stroke-width="0.8"/>
+  <!-- Smile -->
+  <path d="M52 58 Q56 64, 60 64 Q64 64, 68 58" stroke="url(#lips)" stroke-width="2.2" fill="url(#lips)" stroke-linecap="round"/>
+  <!-- Upper lip detail -->
+  <path d="M52 58 Q56 57, 60 59 Q64 57, 68 58" stroke="#D44058" stroke-width="0.5" fill="none"/>
+  <!-- Blush -->
+  <circle cx="44" cy="54" r="5" fill="#CE93D8" opacity="0.2"/>
+  <circle cx="76" cy="54" r="5" fill="#CE93D8" opacity="0.2"/>
+  <!-- Earrings - purple crystal -->
+  <path d="M35 50 L37 54 L39 50 Z" fill="#B388FF" opacity="0.9"/>
+  <path d="M81 50 L83 54 L85 50 Z" fill="#B388FF" opacity="0.9"/>
+  <!-- AI sparkles -->
+  <text x="88" y="90" font-size="8" fill="#B388FF" opacity="0.7">&#10022;</text>
+  <text x="26" y="88" font-size="6" fill="#B388FF" opacity="0.6">&#10022;</text>
+  <text x="92" y="36" font-size="5" fill="#CE93D8" opacity="0.5">&#10022;</text>
+</svg>

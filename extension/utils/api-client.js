@@ -50,12 +50,14 @@ class ApiClient {
     });
   }
 
-  static tryOnCosmetics(faceImageBase64, cosmeticType, color) {
+  static tryOnCosmetics(faceImageBase64, cosmeticType, color, faceIndex, productImage) {
     return ApiClient._sendMessage({
       type: "TRY_ON_COSMETICS",
       faceImageBase64,
       cosmeticType,
       color,
+      faceIndex,
+      productImage,
     });
   }
 

@@ -1,16 +1,21 @@
 {
   "manifest_version": 3,
-  "name": "SuperNova TryOnMe - Virtual Try-On for Amazon",
-  "version": "1.0.0",
-  "description": "Virtual try-on experience for clothing, shoes, and cosmetics on Amazon product pages powered by Amazon Nova.",
+  "name": "SuperNova TryOnMe - Universal Virtual Try-On",
+  "version": "1.1.0",
+  "description": "Virtual try-on experience for clothing, shoes, and cosmetics on Amazon, Shein, Temu, and Google Shopping — powered by Amazon Nova AI.",
   "permissions": [
     "storage",
     "activeTab",
-    "sidePanel"
+    "sidePanel",
+    "contextMenus"
   ],
   "host_permissions": [
     "https://www.amazon.com/*",
-    "https://www.amazon.co.uk/*"
+    "https://www.amazon.co.uk/*",
+    "https://*.shein.com/*",
+    "https://www.temu.com/*",
+    "https://shopping.google.com/*",
+    "https://www.google.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -33,6 +38,55 @@
       ],
       "css": [
         "styles/content.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.shein.com/*-p-*.html*",
+        "https://*.shein.com/product-*"
+      ],
+      "js": [
+        "utils/shein-scraper.js",
+        "utils/image-utils.js",
+        "utils/api-client.js",
+        "content.js"
+      ],
+      "css": [
+        "styles/content.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.temu.com/*-g-*.html*",
+        "https://www.temu.com/goods-detail*"
+      ],
+      "js": [
+        "utils/temu-scraper.js",
+        "utils/image-utils.js",
+        "utils/api-client.js",
+        "content.js"
+      ],
+      "css": [
+        "styles/content.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://shopping.google.com/*",
+        "https://www.google.com/search*"
+      ],
+      "js": [
+        "utils/google-shopping-scraper.js",
+        "utils/image-utils.js",
+        "utils/api-client.js",
+        "content-gshopping.js"
+      ],
+      "css": [
+        "styles/content.css",
+        "styles/gshopping.css"
       ],
       "run_at": "document_idle"
     }
@@ -60,7 +114,11 @@
         "smart-search/results.js",
         "outfit-builder/wardrobe.html",
         "outfit-builder/wardrobe.css",
-        "outfit-builder/wardrobe.js"
+        "outfit-builder/wardrobe.js",
+        "voice-agent/voice.html",
+        "voice-agent/voice.css",
+        "voice-agent/voice.js",
+        "voice-agent/socket.io.min.js"
       ],
       "matches": ["<all_urls>"]
     }

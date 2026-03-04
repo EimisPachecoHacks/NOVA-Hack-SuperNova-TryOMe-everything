@@ -84,4 +84,4 @@ async function resendCode(email) {
   return { sent: true };
 }
 
-module.exports = { signUp, confirmSignUp, signIn, refreshTokens, resendCode };
+module.exports = { cognitoClient, USER_POOL_ID, signUp, confirmSignUp, signIn, refreshTokens, resendCode };

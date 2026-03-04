@@ -206,31 +206,26 @@ async function proxyImageFetch(imageUrl) {
 }
 
 async function getStoredPhotos() {
-  const result = await chrome.storage.local.get(["bodyPhoto", "facePhoto", "selectedPoseIndex"]);
+  const result = await chrome.storage.local.get(["bodyPhoto", "selectedPoseIndex", "selectedFaceIndex"]);
   let bodyPhoto = result.bodyPhoto || null;
-  let facePhoto = result.facePhoto || null;
+  let facePhoto = null;
   const selectedPoseIndex = result.selectedPoseIndex ?? 0;
+  const selectedFaceIndex = result.selectedFaceIndex ?? 0;
 
-  // If photos are missing from local storage, fetch from backend (S3)
-  if (!bodyPhoto || !facePhoto) {
-    try {
-      const allPhotos = await apiGet("/api/profile/photos/all");
-      if (!bodyPhoto && allPhotos.generated && allPhotos.generated[selectedPoseIndex]) {
-        bodyPhoto = allPhotos.generated[selectedPoseIndex];
-        // Cache locally for next time
-        await chrome.storage.local.set({ bodyPhoto });
-      }
-      if (!facePhoto && allPhotos.originals) {
-        // Use last original as face photo (face photos are uploaded last in wizard)
-        const faceImg = allPhotos.originals[allPhotos.originals.length - 1];
-        if (faceImg) {
-          facePhoto = faceImg;
-          await chrome.storage.local.set({ facePhoto });
-        }
-      }
-    } catch (err) {
-      console.warn("[background] Failed to fetch photos from backend:", err.message);
+  // Always fetch face photo fresh based on selectedFaceIndex (indices 3+ in originals)
+  try {
+    const allPhotos = await apiGet("/api/profile/photos/all");
+    if (!bodyPhoto && allPhotos.generated && allPhotos.generated[selectedPoseIndex]) {
+      bodyPhoto = allPhotos.generated[selectedPoseIndex];
+      await chrome.storage.local.set({ bodyPhoto });
     }
+    if (allPhotos.originals) {
+      const facePhotos = allPhotos.originals.slice(3);
+      const idx = Math.min(selectedFaceIndex, facePhotos.length - 1);
+      facePhoto = facePhotos[idx] || allPhotos.originals[allPhotos.originals.length - 1] || null;
+    }
+  } catch (err) {
+    console.warn("[background] Failed to fetch photos from backend:", err.message);
   }
 
   return { bodyPhoto, facePhoto, selectedPoseIndex };
@@ -294,9 +289,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
         case "TRY_ON_COSMETICS": {
           const result = await apiPost("/api/cosmetics", {
-            faceImage: message.faceImageBase64,
+            faceImage: message.faceImageBase64 || null,
             cosmeticType: message.cosmeticType,
             color: message.color,
+            faceIndex: message.faceIndex ?? 0,
+            productImage: message.productImage || null,
           });
           sendResponse({ data: result });
           break;
@@ -380,6 +377,162 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           break;
         }
 
+        // Voice Agent tool actions — forwarded from the voice agent page
+        case "VOICE_SMART_SEARCH": {
+          const searchUrl = chrome.runtime.getURL(
+            `smart-search/results.html?q=${encodeURIComponent(message.query)}`
+          );
+          chrome.tabs.create({ url: searchUrl });
+          sendResponse({ data: { opened: true } });
+          break;
+        }
+
+        case "VOICE_BUILD_OUTFIT": {
+          const outfitParams = new URLSearchParams();
+          if (message.top) outfitParams.set("top", message.top);
+          if (message.bottom) outfitParams.set("bottom", message.bottom);
+          if (message.shoes) outfitParams.set("shoes", message.shoes);
+          if (message.necklace) outfitParams.set("necklace", message.necklace);
+          if (message.earrings) outfitParams.set("earrings", message.earrings);
+          if (message.bracelets) outfitParams.set("bracelets", message.bracelets);
+          const outfitUrl = chrome.runtime.getURL(`outfit-builder/wardrobe.html?${outfitParams.toString()}`);
+          chrome.tabs.create({ url: outfitUrl });
+          sendResponse({ data: { opened: true } });
+          break;
+        }
+
+        case "VOICE_ADD_TO_CART": {
+          const productUrl = message.productUrl || "";
+          const asinMatch = productUrl.match(/\/(?:dp|gp\/product)\/([A-Za-z0-9]{10})/);
+          if (asinMatch) {
+            const cartUrl = `https://www.amazon.com/gp/aws/cart/add.html?ASIN.1=${asinMatch[1]}&Quantity.1=1`;
+            chrome.tabs.create({ url: cartUrl });
+          } else if (productUrl) {
+            chrome.tabs.create({ url: productUrl });
+          }
+          sendResponse({ data: { opened: true } });
+          break;
+        }
+
+        case "VOICE_TRY_ON": {
+          // Navigate to the product URL if available, otherwise notify
+          if (message.productUrl) {
+            chrome.tabs.create({ url: message.productUrl });
+          }
+          sendResponse({ data: { opened: !!message.productUrl } });
+          break;
+        }
+
+        case "VOICE_SAVE_FAVORITE": {
+          // Read last try-on from storage and save as favorite
+          const lastTryOn = (await chrome.storage.local.get("lastTryOn")).lastTryOn;
+          if (!lastTryOn || !lastTryOn.resultImage) {
+            sendResponse({ error: "No try-on result to save" });
+            break;
+          }
+          const favResult = await apiPost("/api/favorites", {
+            asin: lastTryOn.productId,
+            productTitle: lastTryOn.productTitle,
+            productImage: lastTryOn.productImage,
+            productUrl: lastTryOn.productUrl,
+            retailer: lastTryOn.retailer,
+            category: lastTryOn.category,
+            garmentClass: lastTryOn.garmentClass,
+            tryOnResultImage: lastTryOn.resultImage,
+          });
+          sendResponse({ data: favResult });
+          break;
+        }
+
+        case "VOICE_SAVE_VIDEO": {
+          // Read last video from storage and save via API
+          const lastVideo = (await chrome.storage.local.get("lastVideo")).lastVideo;
+          if (!lastVideo) {
+            sendResponse({ error: "No video to save" });
+            break;
+          }
+          const saveResult = await apiPost("/api/video/save", {
+            videoUrl: lastVideo.videoUrl,
+            videoBase64: lastVideo.videoBase64,
+            asin: lastVideo.productId,
+            productTitle: lastVideo.productTitle,
+            productImage: lastVideo.productImage,
+          });
+          sendResponse({ data: saveResult });
+          break;
+        }
+
+        case "VOICE_ANIMATE": {
+          // Read last try-on result and trigger video generation on active tab
+          const tryOnData = (await chrome.storage.local.get("lastTryOn")).lastTryOn;
+          if (!tryOnData || !tryOnData.resultImage) {
+            sendResponse({ error: "No try-on result to animate" });
+            break;
+          }
+          // Send to active tab's content script to click the Animate button
+          const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (activeTab) {
+            chrome.tabs.sendMessage(activeTab.id, { type: "VOICE_CLICK_ANIMATE" });
+          }
+          sendResponse({ data: { status: "ok" } });
+          break;
+        }
+
+        case "VOICE_DOWNLOAD": {
+          // Tell the active tab's content script to trigger download
+          const [dlTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (dlTab) {
+            chrome.tabs.sendMessage(dlTab.id, {
+              type: "VOICE_CLICK_DOWNLOAD",
+              downloadType: message.downloadType || "image",
+            });
+          }
+          sendResponse({ data: { status: "ok" } });
+          break;
+        }
+
+        case "VOICE_SEND": {
+          // Tell the active tab's content script to trigger share
+          const [shareTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (shareTab) {
+            chrome.tabs.sendMessage(shareTab.id, { type: "VOICE_CLICK_SHARE" });
+          }
+          sendResponse({ data: { status: "ok" } });
+          break;
+        }
+
+        case "VOICE_SELECT_SEARCH_ITEM": {
+          const allTabs = await chrome.tabs.query({});
+          const searchTab = allTabs
+            .filter(t => t.url && t.url.includes("smart-search/results.html"))
+            .sort((a, b) => b.id - a.id)[0];
+          if (searchTab) {
+            chrome.tabs.sendMessage(searchTab.id, {
+              type: "VOICE_SELECT_SEARCH_ITEM",
+              number: message.number,
+            });
+          }
+          sendResponse({ data: { status: "ok" } });
+          break;
+        }
+
+        case "VOICE_SELECT_OUTFIT_ITEMS": {
+          const allTabs2 = await chrome.tabs.query({});
+          const outfitTab = allTabs2
+            .filter(t => t.url && t.url.includes("outfit-builder/wardrobe.html"))
+            .sort((a, b) => b.id - a.id)[0];
+          if (outfitTab) {
+            chrome.tabs.sendMessage(outfitTab.id, {
+              type: "VOICE_SELECT_OUTFIT_ITEMS",
+              topNumber: message.topNumber,
+              bottomNumber: message.bottomNumber,
+              shoesNumber: message.shoesNumber,
+            });
+          }
+          sendResponse({ data: { status: "ok" } });
+          break;
+        }
+
         default:
           sendResponse({ error: `Unknown message type: ${message.type}` });
       }
@@ -400,5 +553,61 @@ chrome.action.onClicked.addListener(async (tab) => {
 // Also handle OPEN_POPUP messages from content script (now opens side panel)
 // This is handled inside the message listener but we also set side panel behavior
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+
+// ---------------------------------------------------------------------------
+// Context Menu — "Try On with SuperNova" on right-click any image
+// ---------------------------------------------------------------------------
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: "nova-tryon-image",
+    title: "Try On with SuperNova TryOnMe",
+    contexts: ["image"],
+  });
+});
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId !== "nova-tryon-image") return;
+  const imageUrl = info.srcUrl;
+  if (!imageUrl) return;
+
+  console.log("[bg] Context menu try-on for image:", imageUrl?.substring(0, 80));
+
+  // Check if content script is already injected (e.g. via manifest on supported sites)
+  let alreadyInjected = false;
+  try {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => !!window.__novaTryOnMeLoaded,
+    });
+    alreadyInjected = result?.result === true;
+  } catch (_) {}
+
+  if (!alreadyInjected) {
+    // Inject the content script + CSS on unsupported sites
+    try {
+      await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ["styles/content.css"] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["utils/image-utils.js"] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["utils/api-client.js"] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
+    } catch (err) {
+      console.warn("[bg] Failed to inject content scripts:", err.message);
+    }
+  }
+
+  // Small delay to ensure content script is ready, then send the image URL
+  const delay = alreadyInjected ? 100 : 500;
+  setTimeout(() => {
+    chrome.tabs.sendMessage(tab.id, {
+      type: "CONTEXT_MENU_TRYON",
+      imageUrl,
+      pageUrl: info.pageUrl,
+    }, () => {
+      // Suppress "message channel closed" error — we don't need a response
+      if (chrome.runtime.lastError) {
+        console.warn("[bg] Context menu message:", chrome.runtime.lastError.message);
+      }
+    });
+  }, delay);
+});
 
 console.log("[NovaTryOnMe] Background service worker started.");

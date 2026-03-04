@@ -1,43 +1,10 @@
 const express = require("express");
 const router = express.Router();
-const { S3Client, ListObjectsV2Command, DeleteObjectsCommand } = require("@aws-sdk/client-s3");
-const { AdminDeleteUserCommand, CognitoIdentityProviderClient } = require("@aws-sdk/client-cognito-identity-provider");
+const { AdminDeleteUserCommand } = require("@aws-sdk/client-cognito-identity-provider");
 const { requireAuth } = require("../middleware/auth");
-const { getProfile, getFavorites, getUserVideos, removeFavorite, removeVideo } = require("../services/dynamodb");
-const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
-const { DynamoDBDocumentClient, DeleteCommand } = require("@aws-sdk/lib-dynamodb");
-
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || "us-east-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    ...(process.env.AWS_SESSION_TOKEN && { sessionToken: process.env.AWS_SESSION_TOKEN }),
-  },
-});
-
-const cognitoClient = new CognitoIdentityProviderClient({
-  region: process.env.COGNITO_REGION || process.env.AWS_REGION || "us-east-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    ...(process.env.AWS_SESSION_TOKEN && { sessionToken: process.env.AWS_SESSION_TOKEN }),
-  },
-});
-
-const ddbClient = new DynamoDBClient({
-  region: process.env.AWS_REGION || "us-east-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    ...(process.env.AWS_SESSION_TOKEN && { sessionToken: process.env.AWS_SESSION_TOKEN }),
-  },
-});
-const docClient = DynamoDBDocumentClient.from(ddbClient);
-
-const S3_USER_BUCKET = process.env.S3_USER_BUCKET || "nova-tryonme-users";
-const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
-const PROFILES_TABLE = process.env.DYNAMODB_PROFILES_TABLE || "NovaTryOnMe_UserProfiles";
+const { deleteProfile, getFavorites, getUserVideos, removeFavorite, removeVideo } = require("../services/dynamodb");
+const { s3Client, S3_USER_BUCKET, ListObjectsV2Command, DeleteObjectsCommand } = require("../services/s3");
+const { cognitoClient, USER_POOL_ID } = require("../services/cognito");
 
 // DELETE /api/account — Delete the entire user account
 router.delete("/", requireAuth, async (req, res, next) => {
@@ -86,10 +53,7 @@ router.delete("/", requireAuth, async (req, res, next) => {
     console.log(`[account] Deleted ${videos.length} video records`);
 
     // 4. Delete profile from DynamoDB
-    await docClient.send(new DeleteCommand({
-      TableName: PROFILES_TABLE,
-      Key: { userId },
-    }));
+    await deleteProfile(userId);
     console.log("[account] Deleted profile record");
 
     // 5. Delete Cognito user

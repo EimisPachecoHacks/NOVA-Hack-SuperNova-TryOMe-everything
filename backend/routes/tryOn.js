@@ -1,6 +1,5 @@
 const express = require("express");
 const router = express.Router();
-const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { virtualTryOn: novaVirtualTryOn, removeBackground } = require("../services/novaCanvas");
 const { virtualTryOn: geminiVirtualTryOn, virtualTryOnOutfit: geminiOutfitTryOn, extractGarment, buildSmartPrompt } = require("../services/gemini");
 const { analyzeProduct, classifyOutfit, hasPersonInImage } = require("../services/novaLite");
@@ -76,36 +75,21 @@ async function preprocessGarment(imageBase64, label = "garment") {
 }
 const { optionalAuth } = require("../middleware/auth");
 const { getProfile } = require("../services/dynamodb");
-
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || "us-east-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    ...(process.env.AWS_SESSION_TOKEN && { sessionToken: process.env.AWS_SESSION_TOKEN }),
-  },
-});
-
-const S3_USER_BUCKET = process.env.S3_USER_BUCKET || "nova-tryonme-users";
+const { fetchPhotoFromS3 } = require("../services/s3");
+const { buildCacheKey, buildOutfitCacheKey, getCached, setCached } = require("../services/tryOnCache");
 
 const VALID_GARMENT_CLASSES = [
-  "UPPER_BODY", "LOWER_BODY", "FULL_BODY", "FOOTWEAR",
+  "UPPER_BODY", "LOWER_BODY", "FULL_BODY", "FOOTWEAR", "ACCESSORY",
   "LONG_SLEEVE_SHIRT", "SHORT_SLEEVE_SHIRT", "NO_SLEEVE_SHIRT",
   "LONG_PANTS", "SHORT_PANTS", "LONG_DRESS", "SHORT_DRESS",
-  "FULL_BODY_OUTFIT", "SHOES", "BOOTS"
+  "FULL_BODY_OUTFIT", "SHOES", "BOOTS",
+  "EARRINGS", "NECKLACE", "BRACELET", "RING", "WATCH", "SUNGLASSES", "HAT"
 ];
 
-async function fetchPhotoFromS3(key) {
-  const result = await s3Client.send(new GetObjectCommand({
-    Bucket: S3_USER_BUCKET,
-    Key: key,
-  }));
-  const chunks = [];
-  for await (const chunk of result.Body) {
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks).toString("base64");
-}
+// Accessory sub-classes that benefit from a face/close-up photo
+const FACE_ACCESSORIES = ["EARRINGS", "NECKLACE", "SUNGLASSES"];
+const ACCESSORY_SUB_CLASSES = ["EARRINGS", "NECKLACE", "BRACELET", "RING", "WATCH", "SUNGLASSES", "HAT"];
+
 
 router.post("/", optionalAuth, async (req, res, next) => {
   try {
@@ -153,9 +137,47 @@ router.post("/", optionalAuth, async (req, res, next) => {
     console.log(`\x1b[36m  framing:\x1b[0m         \x1b[1m${framing || "full"}\x1b[0m`);
     console.log(`\x1b[36m  poseIndex:\x1b[0m       \x1b[1m${poseIndex}\x1b[0m`);
 
+    // ═══════════════════════════════════════════════════
+    // CACHE CHECK — skip all steps if same person+garment was generated before
+    // ═══════════════════════════════════════════════════
+    const cacheKey = buildCacheKey(req.userId, referenceImage, garmentClass, framing, poseIndex);
+    const cachedResult = await getCached(cacheKey);
+    if (cachedResult) {
+      const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`\x1b[1m\x1b[32m⚡ CACHE HIT — returning cached result (${totalTime}s)\x1b[0m`);
+
+      // Still build size recommendation from profile
+      let sizeRecommendation = null;
+      if (req.userId) {
+        try {
+          const profile = await getProfile(req.userId);
+          if (profile) {
+            const isFootwear = (garmentClass || "").includes("FOOT") || (garmentClass || "").includes("SHOE") || (garmentClass || "").includes("BOOT");
+            const isAccessory = garmentClass === "ACCESSORY" || ACCESSORY_SUB_CLASSES.includes(garmentClass);
+            if (isFootwear && profile.shoesSize) {
+              sizeRecommendation = { type: "shoes", size: profile.shoesSize, label: `Your shoe size: US ${profile.shoesSize}` };
+            } else if (!isAccessory && profile.clothesSize) {
+              sizeRecommendation = { type: "clothes", size: profile.clothesSize, label: `Your clothing size: ${profile.clothesSize}` };
+              if (profile.sex) sizeRecommendation.label += ` (${profile.sex === "male" ? "Men's" : "Women's"})`;
+            }
+          }
+        } catch (_) {}
+      }
+
+      const response = {
+        resultImage: cachedResult,
+        garmentImageUsed: "cached",
+        cached: true,
+        debug: { steps: [{ step: "cache", name: "CACHE HIT", time: totalTime + "s" }], garmentImageUsed: "cached", totalTime: totalTime + "s" },
+      };
+      if (sizeRecommendation) response.sizeRecommendation = sizeRecommendation;
+      return res.json(response);
+    }
+
     let garmentImageForTryOn = referenceImage;
     let garmentImageUsed = "original";
     let outfitInfo = { currentType: "UPPER_LOWER" };
+    let analysisResult = null;
 
     if (quickMode && garmentClass) {
       // ═══════════════════════════════════════════════════
@@ -169,7 +191,7 @@ router.post("/", optionalAuth, async (req, res, next) => {
     // ═══════════════════════════════════════════════════
     // STEP 1: PRODUCT ANALYSIS (Nova 2 Lite via Bedrock)
     // ═══════════════════════════════════════════════════
-    let analysisResult = null;
+    analysisResult = null;
     try {
       console.log(`\n\x1b[1m\x1b[35m▶ STEP 1: PRODUCT ANALYSIS [Nova 2 Lite via Bedrock]\x1b[0m`);
       console.log(`\x1b[90m  ℹ Analyze the product image to detect garment type, color, and category\x1b[0m`);
@@ -197,11 +219,38 @@ router.post("/", optionalAuth, async (req, res, next) => {
       garmentClass = "UPPER_BODY";
     }
 
+    // Normalize accessory sub-classes to ACCESSORY parent class
+    if (ACCESSORY_SUB_CLASSES.includes(garmentClass)) {
+      const detectedSubClass = garmentClass;
+      garmentClass = "ACCESSORY";
+      if (!analysisResult) analysisResult = {};
+      analysisResult.garmentSubClass = detectedSubClass;
+    }
+
+    // For face accessories (earrings, necklaces, sunglasses), prefer a face photo
+    if (garmentClass === "ACCESSORY" && analysisResult?.garmentSubClass && FACE_ACCESSORIES.includes(analysisResult.garmentSubClass) && req.userId) {
+      try {
+        const profile = await getProfile(req.userId);
+        if (profile && profile.facePhotoKey) {
+          console.log(`\x1b[36m  [accessory] Using face photo for ${analysisResult.garmentSubClass}\x1b[0m`);
+          sourceImage = await fetchPhotoFromS3(profile.facePhotoKey);
+        }
+      } catch (err) {
+        console.warn(`\x1b[33m  [accessory] Could not fetch face photo: ${err.message}\x1b[0m`);
+      }
+    }
+
     // ═══════════════════════════════════════════════════
     // STEP 2: GARMENT PREPROCESSING (shared pipeline)
     // Person detection → Gemini extraction → Nova BG removal fallback
+    // Skip for accessories — extraction would extract clothing, not the accessory
     // ═══════════════════════════════════════════════════
-    {
+    if (garmentClass === "ACCESSORY") {
+      console.log(`\n\x1b[1m\x1b[35m▶ STEP 2: SKIPPED (accessory — use original product image)\x1b[0m`);
+      garmentImageForTryOn = referenceImage;
+      garmentImageUsed = "original";
+      debugSteps.push({ step: "2", name: "GARMENT PREPROCESSING", time: "0s", result: { method: "skipped", reason: "accessory — extraction would extract clothing instead of accessory" } });
+    } else {
       console.log(`\n\x1b[1m\x1b[35m▶ STEP 2: GARMENT PREPROCESSING [shared pipeline]\x1b[0m`);
       console.log(`\x1b[90m  ℹ Detect model in garment image and extract clean garment if needed\x1b[0m`);
       const s2 = Date.now();
@@ -215,8 +264,12 @@ router.post("/", optionalAuth, async (req, res, next) => {
 
     // ═══════════════════════════════════════════════════
     // STEP 3: OUTFIT CLASSIFICATION (Nova 2 Lite via Bedrock)
+    // Skip for accessories — no outfit conflict to resolve
     // ═══════════════════════════════════════════════════
-    try {
+    if (garmentClass === "ACCESSORY") {
+      console.log(`\n\x1b[1m\x1b[35m▶ STEP 3: SKIPPED (accessory — no outfit conflict)\x1b[0m`);
+      debugSteps.push({ step: "3", name: "OUTFIT CLASSIFICATION", model: "SKIPPED", time: "0s", result: { reason: "accessory" } });
+    } else try {
       console.log(`\n\x1b[1m\x1b[35m▶ STEP 3: OUTFIT CLASSIFICATION [Nova 2 Lite via Bedrock]\x1b[0m`);
       console.log(`\x1b[90m  ℹ Classify what the user is currently wearing (top+bottom, dress, outerwear) to handle outfit conflicts\x1b[0m`);
       const s3 = Date.now();
@@ -239,8 +292,12 @@ router.post("/", optionalAuth, async (req, res, next) => {
     // ═══════════════════════════════════════════════════
     // STEP 4: CONFLICT MATRIX (buildSmartPrompt)
     // ═══════════════════════════════════════════════════
+    // Pass garmentSubClass through outfitInfo for accessory prompts
+    if (garmentClass === "ACCESSORY" && analysisResult?.garmentSubClass) {
+      outfitInfo.garmentSubClass = analysisResult.garmentSubClass;
+    }
     const smartPrompt = buildSmartPrompt(garmentClass, outfitInfo, framing);
-    const strategy = outfitInfo?.currentType === "FULL_BODY" && (garmentClass === "UPPER_BODY" || garmentClass === "LOWER_BODY") ? "CONFLICT RESOLUTION" : "STANDARD";
+    const strategy = garmentClass === "ACCESSORY" ? "ACCESSORY" : (outfitInfo?.currentType === "FULL_BODY" && (garmentClass === "UPPER_BODY" || garmentClass === "LOWER_BODY") ? "CONFLICT RESOLUTION" : "STANDARD");
     console.log(`\n\x1b[1m\x1b[35m▶ STEP 4: CONFLICT MATRIX [buildSmartPrompt]\x1b[0m`);
     console.log(`\x1b[90m  ℹ Determine try-on strategy and build the context-aware prompt for Gemini\x1b[0m`);
     console.log(`\x1b[36m    strategy:\x1b[0m          \x1b[1m\x1b[33m${strategy}\x1b[0m`);
@@ -280,7 +337,36 @@ router.post("/", optionalAuth, async (req, res, next) => {
     console.log(`\x1b[1m\x1b[32m║         ✅ TRY-ON COMPLETE — ${totalTime}s total               ║\x1b[0m`);
     console.log(`\x1b[1m\x1b[32m╚══════════════════════════════════════════════════════╝\x1b[0m\n`);
 
-    res.json({
+    // Build size/fit recommendation from user profile (#16)
+    let sizeRecommendation = null;
+    if (req.userId) {
+      try {
+        const profile = await getProfile(req.userId);
+        if (profile) {
+          const isFootwear = garmentClass === "FOOTWEAR" || garmentClass === "SHOES" || garmentClass === "BOOTS";
+          const isAccessory = garmentClass === "ACCESSORY" || ACCESSORY_SUB_CLASSES.includes(garmentClass);
+
+          if (isFootwear && profile.shoesSize) {
+            sizeRecommendation = { type: "shoes", size: profile.shoesSize, label: `Your shoe size: US ${profile.shoesSize}` };
+          } else if (!isAccessory && profile.clothesSize) {
+            sizeRecommendation = { type: "clothes", size: profile.clothesSize, label: `Your clothing size: ${profile.clothesSize}` };
+            if (profile.sex) {
+              sizeRecommendation.label += ` (${profile.sex === "male" ? "Men's" : "Women's"})`;
+            }
+          }
+        }
+      } catch (err) {
+        // Non-critical — don't fail the try-on if profile lookup fails
+        console.warn(`[tryOn] Could not fetch profile for size recommendation: ${err.message}`);
+      }
+    }
+
+    // Cache the result for future identical requests
+    if (resultImage) {
+      setCached(cacheKey, resultImage, req.userId).catch(() => {});
+    }
+
+    const response = {
       resultImage,
       garmentImageUsed,
       debug: {
@@ -288,7 +374,10 @@ router.post("/", optionalAuth, async (req, res, next) => {
         garmentImageUsed,
         totalTime: totalTime + "s",
       },
-    });
+    };
+    if (sizeRecommendation) response.sizeRecommendation = sizeRecommendation;
+
+    res.json(response);
   } catch (error) {
     next(error);
   }
@@ -355,6 +444,17 @@ router.post("/outfit", optionalAuth, async (req, res, next) => {
     console.log(`\x1b[36m  sourceImage:\x1b[0m     ${sourceImage.length} chars`);
     console.log(`\x1b[36m  framing:\x1b[0m         \x1b[1m${framing || "full"}\x1b[0m`);
 
+    // ═══════════════════════════════════════════════════
+    // CACHE CHECK — outfit try-on
+    // ═══════════════════════════════════════════════════
+    const outfitCacheKey = buildOutfitCacheKey(req.userId, garments, framing, poseIndex);
+    const cachedOutfit = await getCached(outfitCacheKey);
+    if (cachedOutfit) {
+      const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`\x1b[1m\x1b[32m⚡ OUTFIT CACHE HIT — returning cached result (${totalTime}s)\x1b[0m`);
+      return res.json({ resultImage: cachedOutfit, cached: true, totalTime: totalTime + "s" });
+    }
+
     // Preprocess all garment images in parallel (same pipeline as single try-on)
     console.log(`\n\x1b[1m\x1b[35m▶ GARMENT PREPROCESSING [shared pipeline × ${garments.length}]\x1b[0m`);
     const preprocessResults = await Promise.all(
@@ -371,6 +471,11 @@ router.post("/outfit", optionalAuth, async (req, res, next) => {
     console.log(`\n\x1b[1m\x1b[32m╔══════════════════════════════════════════════════════╗\x1b[0m`);
     console.log(`\x1b[1m\x1b[32m║      ✅ OUTFIT TRY-ON COMPLETE — ${totalTime}s total            ║\x1b[0m`);
     console.log(`\x1b[1m\x1b[32m╚══════════════════════════════════════════════════════╝\x1b[0m\n`);
+
+    // Cache outfit result
+    if (resultImage) {
+      setCached(outfitCacheKey, resultImage, req.userId).catch(() => {});
+    }
 
     res.json({ resultImage, totalTime: totalTime + "s" });
   } catch (error) {

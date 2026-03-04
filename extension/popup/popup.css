@@ -283,6 +283,14 @@ select.text-input { cursor: pointer; }
 .fav-card-tryon { border: 2px solid #FF9900; }
 .fav-card-product { opacity: 0.7; width: 44px; height: 72px; object-fit: contain; }
 .fav-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.fav-card-retailer {
+  display: inline-block; font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.5px; padding: 2px 6px; border-radius: 3px; margin-bottom: 4px;
+}
+.fav-retailer-amazon { background: #fff3e0; color: #c45500; }
+.fav-retailer-shein { background: #fce4ec; color: #c62828; }
+.fav-retailer-temu { background: #fff3e0; color: #e65100; }
+.fav-retailer-google-shopping { background: #e3f2fd; color: #1565c0; }
 .fav-card-title {
   font-size: 12px; font-weight: 600; color: #232f3e;
   overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
@@ -324,6 +332,39 @@ select.text-input { cursor: pointer; }
   padding: 0 4px; align-self: flex-start; transition: color 0.2s;
 }
 .fav-outfit-remove:hover { color: #ff4757; }
+
+/* Favorites cart checkbox + bar */
+.fav-card-checkbox {
+  appearance: none; -webkit-appearance: none;
+  width: 20px; height: 20px; border: 2px solid #ccc; border-radius: 4px;
+  flex-shrink: 0; cursor: pointer; position: relative; transition: all 0.2s;
+  align-self: center; margin-right: -4px;
+}
+.fav-card-checkbox:checked {
+  background: #FF9900; border-color: #FF9900;
+}
+.fav-card-checkbox:checked::after {
+  content: '✓'; color: #fff; font-size: 14px; font-weight: 700;
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+}
+.fav-card-checkbox:hover { border-color: #FF9900; }
+.fav-card.fav-card-selected { border-color: #FF9900; background: #fff8ee; }
+.fav-outfit-card.fav-card-selected { background: #fff8ee; }
+
+.fav-cart-bar {
+  position: sticky; bottom: 0; background: #fff; border-top: 1px solid #e8e8e8;
+  padding: 10px 12px; display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; box-shadow: 0 -2px 8px rgba(0,0,0,0.08); z-index: 10;
+}
+.fav-cart-count { font-size: 12px; color: #555; font-weight: 600; }
+.fav-cart-btn { white-space: nowrap; }
+.fav-cart-bar[hidden] { display: none; }
+.fav-cart-bar .fav-cart-btn:disabled {
+  opacity: 0.6; cursor: not-allowed;
+}
+.fav-cart-success {
+  text-align: center; padding: 16px; color: #00c853; font-weight: 600; font-size: 13px;
+}
 
 /* Video cards */
 .videos-list { display: flex; flex-direction: column; gap: 12px; padding-bottom: 12px; }
@@ -826,6 +867,30 @@ select.text-input { cursor: pointer; }
   line-height: 1.4;
 }
 
+/* ---- Confetti Celebration ---- */
+.confetti-container {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+  overflow: hidden;
+}
+
+.confetti-piece {
+  position: absolute;
+  top: -10px;
+  width: 8px;
+  height: 8px;
+  opacity: 0;
+  animation: confetti-fall 3s ease-out forwards;
+}
+
+@keyframes confetti-fall {
+  0% { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); }
+  100% { opacity: 0; transform: translateY(600px) rotate(720deg) scale(0.3); }
+}
+
 /* ---- Clickable Images ---- */
 .clickable-img { cursor: pointer; transition: opacity 0.15s; }
 .clickable-img:hover { opacity: 0.85; }
@@ -966,3 +1031,160 @@ select.text-input { cursor: pointer; }
   background: #fff0f0;
   border-color: #cc0c39;
 }
+
+/* ---- Cosmetics / Beauty Try-On ---- */
+.cosmetics-form { display: flex; flex-direction: column; gap: 10px; }
+.cosmetics-row { display: flex; flex-direction: column; gap: 4px; }
+.cosmetics-label { font-size: 11px; font-weight: 600; color: #565959; }
+.cosmetics-select { font-size: 12px; }
+.cosmetics-colors {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.cosmetics-swatch {
+  width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent;
+  cursor: pointer; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+.cosmetics-swatch:hover { transform: scale(1.15); }
+.cosmetics-swatch.selected {
+  border-color: #232f3e; box-shadow: 0 0 0 2px #FF9900;
+}
+.cosmetics-result {
+  text-align: center; margin-top: 8px;
+}
+.cosmetics-result img {
+  max-width: 100%; border-radius: 10px; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+.cosmetics-result-label {
+  font-size: 10px; color: #888; margin-top: 4px;
+}
+.cosmetics-face-selector {
+  display: flex; gap: 8px; align-items: center;
+}
+.cosmetics-face-loading {
+  font-size: 11px; color: #888; margin: 0;
+}
+.cosmetics-face-thumb {
+  width: 56px; height: 56px; border-radius: 50%; object-fit: cover;
+  border: 3px solid transparent; cursor: pointer;
+  transition: all 0.2s; box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+.cosmetics-face-thumb:hover { transform: scale(1.08); }
+.cosmetics-face-thumb.selected {
+  border-color: #FF9900; box-shadow: 0 0 0 2px #FF9900;
+}
+
+/* ---- Stella Voice Agent (inline) ---- */
+.stella-container {
+  background: #FF9900;
+  border-radius: 12px;
+  padding: 12px;
+  color: #fff;
+  border: none;
+}
+.stella-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+.stella-name { font-size: 13px; font-weight: 700; color: #fff; }
+.stella-status {
+  font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+  background: rgba(255,255,255,0.2); color: #fff;
+}
+.stella-status.connected { background: rgba(255,255,255,0.25); color: #fff; }
+.stella-status.listening { background: rgba(76,175,80,0.85); color: #fff; }
+.stella-status.speaking { background: rgba(255,255,255,0.3); color: #fff; }
+.stella-status.error { background: rgba(244,67,54,0.8); color: #fff; }
+
+.stella-avatar-row {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
+}
+.stella-avatar {
+  width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0;
+  border: 2.5px solid rgba(255,255,255,0.5);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  transition: all 0.3s ease;
+  object-fit: cover;
+}
+.stella-avatar.listening {
+  border-color: #fff;
+  box-shadow: 0 0 16px rgba(255,255,255,0.4), 0 2px 8px rgba(0,0,0,0.15);
+  animation: stella-pulse 2s ease-in-out infinite;
+}
+.stella-avatar.speaking {
+  border-color: #fff;
+  box-shadow: 0 0 16px rgba(255,255,255,0.4), 0 2px 8px rgba(0,0,0,0.15);
+  animation: stella-pulse-blue 1s ease-in-out infinite;
+}
+.stella-avatar.thinking {
+  border-color: rgba(255,255,255,0.7);
+  box-shadow: 0 0 16px rgba(255,255,255,0.3), 0 2px 8px rgba(0,0,0,0.15);
+  animation: stella-pulse 2s ease-in-out infinite;
+}
+@keyframes stella-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+@keyframes stella-pulse-blue { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+
+.stella-state { font-size: 11px; color: rgba(255,255,255,0.8); }
+
+.stella-transcript {
+  max-height: 120px; overflow-y: auto; margin-bottom: 8px;
+  padding: 8px; border-radius: 8px;
+  background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.1);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.stella-placeholder { color: rgba(255,255,255,0.6); font-size: 11px; text-align: center; padding: 8px 0; }
+.stella-msg {
+  font-size: 11px; line-height: 1.3; padding: 4px 8px; border-radius: 8px;
+  max-width: 85%; word-wrap: break-word;
+}
+.stella-msg.user {
+  align-self: flex-end; background: rgba(255,255,255,0.2); color: #fff;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+.stella-msg.assistant {
+  align-self: flex-start; background: rgba(255,255,255,0.25); color: #fff;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+.stella-msg.system {
+  align-self: center; color: rgba(255,255,255,0.6); font-size: 10px; font-style: italic;
+}
+
+.stella-tool-bar {
+  display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+  background: rgba(255,255,255,0.15); border-radius: 6px;
+  font-size: 11px; color: #fff; margin-bottom: 8px;
+}
+.stella-tool-icon { animation: stella-spin 2s linear infinite; }
+@keyframes stella-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+.stella-controls {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+.stella-voice-select {
+  background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3);
+  color: #fff; padding: 4px 8px; border-radius: 6px; font-size: 11px;
+  outline: none; cursor: pointer;
+}
+.stella-voice-select option { color: #333; background: #fff; }
+.stella-mic-btn {
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.5); background: rgba(255,255,255,0.15);
+  color: #fff; cursor: pointer; display: flex; align-items: center;
+  justify-content: center; transition: all 0.2s ease;
+}
+.stella-mic-btn:hover { background: rgba(255,255,255,0.25); border-color: #fff; }
+.stella-mic-btn.active {
+  background: rgba(255,255,255,0.3); border-color: #fff;
+  box-shadow: 0 0 12px rgba(255,255,255,0.3);
+}
+.stella-stop-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.5); background: rgba(255,255,255,0.15);
+  color: #fff; cursor: pointer; display: flex; align-items: center;
+  justify-content: center; transition: all 0.2s ease;
+}
+.stella-stop-btn:hover { background: rgba(255,255,255,0.25); border-color: #fff; }
+
+.stella-transcript::-webkit-scrollbar { width: 3px; }
+.stella-transcript::-webkit-scrollbar-track { background: transparent; }
+.stella-transcript::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }

@@ -51,18 +51,35 @@ function buildSmartPrompt(garmentClass, outfitInfo, framing) {
     return `You are a professional virtual try-on system. Take the person in the first image and put on the footwear shown in the second image. Replace ONLY the shoes/footwear. IMPORTANT: Keep ALL clothing (shirt, pants, dress, etc.) EXACTLY the same — do NOT change any clothing item. ${STUDIO_SUFFIX}`;
   }
 
+  // Trying on accessories: add to person without removing clothing
+  if (garmentClass === "ACCESSORY") {
+    const ACCESSORY_SUFFIX = "CRITICAL: The output MUST be the EXACT same person from the first image — same face, same skin tone, same body, same hair. Do NOT generate a different person. Keep ALL existing clothing EXACTLY the same. White studio background. Photorealistic. Output only the image.";
+    const accessoryPrompts = {
+      EARRINGS: `You are a professional virtual try-on system for jewelry. Take the person in the first image and put on the earrings shown in the second image. Remove any existing earrings first. Keep everything else exactly the same — same hair, same face, same clothing, same pose. EARRING PLACEMENT RULES (ABSOLUTELY CRITICAL — FOLLOW EXACTLY): The earring hook/wire/post MUST physically penetrate through the piercing hole in the earlobe. Look at where the earlobe is — the earring attaches AT that point and hangs downward from it due to gravity. The earring must NOT float next to the face or jaw. The earring must NOT be pasted onto the cheek or neck. The connection point is ALWAYS the earlobe piercing. Earrings must be realistically sized (2-5cm), proportional to the ear. If the second image shows a person wearing the earrings, focus ONLY on the earring jewelry itself — ignore the person in the second image entirely. ${ACCESSORY_SUFFIX}`,
+      NECKLACE: `You are a professional virtual try-on system for jewelry. Take the person in the first image and put on the necklace/pendant shown in the second image. The second image may show a person/model wearing the necklace — focus ONLY on the necklace/chain/pendant jewelry itself, completely ignore any clothing or person in the second image. Place the necklace naturally around the person's neck with correct drape, perspective, and scale. Remove any existing necklace first. CRITICAL: Do NOT change, replace, or modify the person's clothing in any way. The shirt/top/dress they are wearing MUST remain EXACTLY the same. Only add the necklace. ${ACCESSORY_SUFFIX}`,
+      BRACELET: `You are a professional virtual try-on system for jewelry. Take the person in the first image and put on the bracelet shown in the second image on their wrist. Place it naturally with correct scale and perspective. Keep everything else exactly the same. ${ACCESSORY_SUFFIX}`,
+      RING: `You are a professional virtual try-on system for jewelry. Take the person in the first image and put on the ring shown in the second image on their finger. Place it naturally with correct scale and perspective. Keep everything else exactly the same. ${ACCESSORY_SUFFIX}`,
+      WATCH: `You are a professional virtual try-on system. Take the person in the first image and put on the watch shown in the second image on their wrist. Place it naturally with correct scale and perspective. Remove any existing watch or bracelet on that wrist. Keep everything else exactly the same. ${ACCESSORY_SUFFIX}`,
+      SUNGLASSES: `You are a professional virtual try-on system. Take the person in the first image and put on the sunglasses shown in the second image. Place them naturally on the person's face with correct fit, scale, and perspective. Remove any existing glasses first. Keep everything else exactly the same — same hair, same face shape, same clothing. ${ACCESSORY_SUFFIX}`,
+      HAT: `You are a professional virtual try-on system. Take the person in the first image and put on the hat/cap shown in the second image. Place it naturally on the person's head with correct fit, scale, and perspective. Remove any existing hat first. The hair should look natural under/around the hat. Keep everything else exactly the same. ${ACCESSORY_SUFFIX}`,
+    };
+    // Use garmentSubClass if available from analysis, or look for it in outfitInfo
+    const subClass = outfitInfo?.garmentSubClass || "EARRINGS";
+    return accessoryPrompts[subClass] || accessoryPrompts.EARRINGS;
+  }
+
   // Trying on a full body garment (dress/jumpsuit): always replaces everything
-  if (garmentClass === "FULL_BODY") {
-    return `You are a professional virtual try-on system. Take the person in the first image and dress them in the full body garment (dress/jumpsuit) shown in the second image. Replace the ENTIRE outfit with this garment. ${STUDIO_SUFFIX}`;
+  if (["FULL_BODY", "LONG_DRESS", "SHORT_DRESS", "FULL_BODY_OUTFIT"].includes(garmentClass)) {
+    return `You are a professional virtual try-on system. Take the person in the first image. COMPLETELY REMOVE all their current clothing — every piece. Then dress them in ONLY the full body garment (dress/jumpsuit) shown in the second image. The person must be wearing NOTHING except the new garment. No other clothing should be visible underneath or on top. ${STUDIO_SUFFIX}`;
   }
 
   // Person wearing separate top+bottom (no conflict for top or bottom)
   if (currentType === "UPPER_LOWER") {
     if (garmentClass === "UPPER_BODY") {
-      return `You are a professional virtual try-on system. Take the person in the first image and replace ONLY their upper body clothing (shirt/top/blouse) with the garment shown in the second image. IMPORTANT: Keep the lower body clothing (pants/skirt/shorts) EXACTLY the same — do NOT change, replace, or alter the bottom clothing in any way. The bottom half must remain identical to the original photo. If the garment image shows matching pants or a set, IGNORE the pants — only use the top piece. ${STUDIO_SUFFIX}`;
+      return `You are a professional virtual try-on system. Take the person in the first image. COMPLETELY REMOVE their current upper body clothing (shirt/top/blouse) — it must disappear entirely. Then put the NEW garment from the second image directly on their body as their only top. The new garment must sit directly on the person's body, NOT layered on top of existing clothes. IMPORTANT: Keep the lower body clothing (pants/skirt/shorts) EXACTLY the same — do NOT change the bottom clothing. If the garment image shows matching pants or a set, IGNORE the pants — only use the top piece. ${STUDIO_SUFFIX}`;
     }
     if (garmentClass === "LOWER_BODY") {
-      return `You are a professional virtual try-on system. Take the person in the first image and replace ONLY their lower body clothing (pants/skirt/shorts) with the garment shown in the second image. IMPORTANT: Keep the upper body clothing (shirt/top) EXACTLY the same — do NOT change, replace, or alter the top clothing in any way. The top half must remain identical to the original photo. ${STUDIO_SUFFIX}`;
+      return `You are a professional virtual try-on system. Take the person in the first image. COMPLETELY REMOVE their current lower body clothing (pants/skirt/shorts) — it must disappear entirely. Then put the NEW garment from the second image directly on their body as their only bottom. The new garment must sit directly on the person's body, NOT layered on top of existing clothes. IMPORTANT: Keep the upper body clothing (shirt/top) EXACTLY the same — do NOT change the top clothing. ${STUDIO_SUFFIX}`;
     }
   }
 
@@ -124,10 +141,12 @@ async function virtualTryOn(sourceImageBase64, referenceImageBase64, garmentClas
   console.log(`\x1b[34m  │ strategy:\x1b[0m     \x1b[1m\x1b[33m${strategy}\x1b[0m`);
   console.log(`\x1b[34m  │ \x1b[1mFULL PROMPT:\x1b[0m`);
   console.log(`\x1b[33m  │ ${prompt}\x1b[0m`);
+  const modelId = garmentClass === "ACCESSORY" ? "gemini-3-pro-image-preview" : "gemini-2.5-flash-image";
+  console.log(`\x1b[34m  │ model:\x1b[0m        \x1b[1m${modelId}\x1b[0m`);
   console.log(`\x1b[34m  └─── CALLING GEMINI API... ───┘\x1b[0m`);
 
   const response = await client.models.generateContent({
-    model: "gemini-2.5-flash-image",
+    model: modelId,
     contents: [
       {
         role: "user",
@@ -423,4 +442,4 @@ Generate a single photorealistic image of the customer wearing ALL these garment
   throw new Error("No image in Gemini outfit try-on response");
 }
 
-module.exports = { virtualTryOn, virtualTryOnOutfit, extractGarment, buildSmartPrompt, generateProfilePhoto };
+module.exports = { getClient, virtualTryOn, virtualTryOnOutfit, extractGarment, buildSmartPrompt, generateProfilePhoto };
