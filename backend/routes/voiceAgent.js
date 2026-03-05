@@ -690,7 +690,7 @@ async function executeTool(toolName, argsJson, socket) {
 
       return {
         status: "success",
-        message: `Selected ${cat} #${num} in the outfit builder. The item is now highlighted in the wardrobe.`,
+        message: `Selected ${cat} #${num} in the outfit builder. The item is now highlighted in the wardrobe. IMPORTANT: The wardrobe AUTOMATICALLY triggers the virtual try-on once all 6 categories are selected — do NOT ask the user if they want to try on and do NOT call try_on yourself. Just let them know items are being selected.`,
       };
     }
 

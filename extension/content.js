@@ -444,6 +444,14 @@
     let imageContainer = findImageAnchor();
     let useFixedOverlay = false;
 
+    // Temu uses deeply nested containers with overflow:hidden and hashed class names
+    // that clip our absolute-positioned overlay. Always use fixed modal on Temu.
+    const host = window.location.hostname;
+    if (host.includes("temu.")) {
+      useFixedOverlay = true;
+      imageContainer = document.body;
+    }
+
     if (!imageContainer) {
       // Fallback: use document.body and show overlay as fixed-position modal
       console.warn("[NovaTryOnMe] No image anchor — using fixed overlay as fallback.");

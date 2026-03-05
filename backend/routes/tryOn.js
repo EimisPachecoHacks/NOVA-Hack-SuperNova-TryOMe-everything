@@ -9,7 +9,7 @@ const { analyzeProduct, classifyOutfit, hasPersonInImage } = require("../service
 // Detects model/person in garment image and extracts clean garment-only version
 // Fallback chain: Gemini extraction → Nova Canvas BG removal → original
 // ---------------------------------------------------------------------------
-async function preprocessGarment(imageBase64, label = "garment") {
+async function preprocessGarment(imageBase64, label = "garment", garmentClass = null) {
   const debugSteps = [];
 
   // Step A: Person detection
@@ -31,6 +31,11 @@ async function preprocessGarment(imageBase64, label = "garment") {
 
   if (!hasPerson) {
     return { image: imageBase64, method: "original", debugSteps };
+  }
+
+  // For FULL_BODY sets, enhance the description so extraction gets ALL pieces
+  if (garmentClass && ["FULL_BODY", "FULL_BODY_OUTFIT"].includes(garmentClass)) {
+    garmentDescription = (garmentDescription || "outfit") + " — this is a COMPLETE SET with MULTIPLE pieces (top + bottom). Extract ALL pieces together";
   }
 
   // Step B: Gemini garment extraction (primary)
@@ -198,8 +203,10 @@ router.post("/", optionalAuth, async (req, res, next) => {
       const s1 = Date.now();
       analysisResult = await analyzeProduct(referenceImage, "", "");
       const s1t = ((Date.now() - s1) / 1000).toFixed(1);
-      // Use detected garmentClass if not provided by frontend
-      if (!garmentClass && analysisResult.garmentClass) {
+      // Always prefer Step 1's classification — the frontend may have run a separate
+      // analysis call that returned a different result (Nova 2 Lite is non-deterministic).
+      // Step 1 is the authoritative classification for the try-on pipeline.
+      if (analysisResult.garmentClass) {
         garmentClass = analysisResult.garmentClass;
       }
       console.log(`\x1b[32m  ✓ STEP 1 COMPLETE\x1b[0m \x1b[90m(${s1t}s)\x1b[0m`);
@@ -249,17 +256,22 @@ router.post("/", optionalAuth, async (req, res, next) => {
       console.log(`\n\x1b[1m\x1b[35m▶ STEP 2: SKIPPED (accessory — use original product image)\x1b[0m`);
       garmentImageForTryOn = referenceImage;
       garmentImageUsed = "original";
-      debugSteps.push({ step: "2", name: "GARMENT PREPROCESSING", time: "0s", result: { method: "skipped", reason: "accessory — extraction would extract clothing instead of accessory" } });
+      debugSteps.push({ step: "2", name: "GARMENT PREPROCESSING", model: "SKIPPED", time: "0s", result: { method: "skipped", reason: "accessory — extraction would extract clothing instead of accessory" } });
+    } else if (["FULL_BODY", "FULL_BODY_OUTFIT"].includes(garmentClass) || (analysisResult && ["FULL_BODY", "FULL_BODY_OUTFIT"].includes(analysisResult.garmentSubClass))) {
+      console.log(`\n\x1b[1m\x1b[35m▶ STEP 2: SKIPPED (2-piece set — extraction would lose the bottom piece)\x1b[0m`);
+      garmentImageForTryOn = referenceImage;
+      garmentImageUsed = "original";
+      debugSteps.push({ step: "2", name: "GARMENT PREPROCESSING", model: "SKIPPED", time: "0s", result: { method: "skipped", reason: "FULL_BODY set — garment extraction strips bottom piece, using original product image with both pieces" } });
     } else {
       console.log(`\n\x1b[1m\x1b[35m▶ STEP 2: GARMENT PREPROCESSING [shared pipeline]\x1b[0m`);
       console.log(`\x1b[90m  ℹ Detect model in garment image and extract clean garment if needed\x1b[0m`);
       const s2 = Date.now();
-      const preprocessed = await preprocessGarment(referenceImage, "garment");
+      const preprocessed = await preprocessGarment(referenceImage, "garment", garmentClass);
       garmentImageForTryOn = preprocessed.image;
       garmentImageUsed = preprocessed.method;
       const s2t = ((Date.now() - s2) / 1000).toFixed(1);
       console.log(`\x1b[32m  ✓ STEP 2 COMPLETE\x1b[0m \x1b[90m(${s2t}s)\x1b[0m — method: \x1b[1m${garmentImageUsed}\x1b[0m`);
-      debugSteps.push({ step: "2", name: "GARMENT PREPROCESSING", time: s2t + "s", result: { method: garmentImageUsed, substeps: preprocessed.debugSteps } });
+      debugSteps.push({ step: "2", name: "GARMENT PREPROCESSING", model: "Gemini + Nova Canvas", time: s2t + "s", result: { method: garmentImageUsed, substeps: preprocessed.debugSteps } });
     }
 
     // ═══════════════════════════════════════════════════

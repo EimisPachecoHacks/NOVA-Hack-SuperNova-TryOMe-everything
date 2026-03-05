@@ -43,10 +43,12 @@ Classification rules:
 - Bags, purses, backpacks → category: "unsupported"
 - Everything else → category: "unsupported"
 
-CRITICAL classification rule for TWO-PIECE SETS:
-- If the image shows a MATCHING SET (top + bottom sold together as a pair), do NOT classify as FULL_BODY. Instead, classify based on the PRIMARY piece — usually UPPER_BODY if the title mentions "top", "shirt", "blouse", or LOWER_BODY if the title mentions "pants", "skirt", "shorts".
-- FULL_BODY should ONLY be used for SINGLE connected garments (dresses, jumpsuits, rompers, overalls) — NOT for two separate pieces shown together.
-- Always prioritize the product TITLE over the image when determining what the product is. If the title says "top" or "crop top", classify as UPPER_BODY even if the image shows matching pants.
+CRITICAL classification rules:
+- If the product is sold as a MATCHING SET or TWO-PIECE SET (top + bottom sold together), classify as garmentClass: "FULL_BODY", garmentSubClass: "FULL_BODY_OUTFIT". This includes: swimsuit sets, tankini sets, co-ord sets, matching top+skirt, matching top+shorts, bikini sets, pajama sets, workout sets. The key indicator is the product title containing words like "set", "two-piece", "2-piece", "outfit", "co-ord", "matching", or showing top+bottom sold as one product.
+- SINGLE PIECE garments that cover the full body (dresses, jumpsuits, rompers, overalls) → garmentClass: "FULL_BODY", garmentSubClass: "LONG_DRESS" or "SHORT_DRESS"
+- UPPER_BODY should ONLY be used when the product is a SINGLE top piece sold alone (not part of a set).
+- LOWER_BODY should ONLY be used when the product is a SINGLE bottom piece sold alone (not part of a set).
+- Always check the product TITLE for keywords like "set", "two-piece", "pair", "outfit" — these indicate FULL_BODY classification.
 
 For styleTips, provide 2-3 short, helpful fashion tips about how to style or wear this product.
 

@@ -7,3 +7,16 @@ node_modules/
 backend/node_modules/
 dist/
 *.zip
+.claude/
+__pycache__/
+*.pyc
+venv/
+output/
+test-repos/
+
+# Local test/bench scripts (contain API keys)
+test_*.py
+bench_*.py
+11_virtual_try_on_basic_use_garment_mask.py
+amazon_image_gen.py
+file_utils.py

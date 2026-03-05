@@ -68,9 +68,9 @@ function buildSmartPrompt(garmentClass, outfitInfo, framing) {
     return accessoryPrompts[subClass] || accessoryPrompts.EARRINGS;
   }
 
-  // Trying on a full body garment (dress/jumpsuit): always replaces everything
+  // Trying on a full body garment (dress, jumpsuit, or matching set): always replaces everything
   if (["FULL_BODY", "LONG_DRESS", "SHORT_DRESS", "FULL_BODY_OUTFIT"].includes(garmentClass)) {
-    return `You are a professional virtual try-on system. Take the person in the first image. COMPLETELY REMOVE all their current clothing — every piece. Then dress them in ONLY the full body garment (dress/jumpsuit) shown in the second image. The person must be wearing NOTHING except the new garment. No other clothing should be visible underneath or on top. ${STUDIO_SUFFIX}`;
+    return `You are a professional virtual try-on system. Take the person in the first image. COMPLETELY REMOVE all their current clothing — every single piece (top, bottom, everything). Then dress them in the COMPLETE outfit shown in the second image. IMPORTANT: The second image may show a SINGLE garment (dress, jumpsuit) OR a MATCHING SET (top + bottom sold together, such as a tankini set, co-ord set, swimsuit set, pajama set). If it is a matching set with multiple pieces, you MUST put ALL pieces on the person — both the top AND the bottom. The person must be wearing NOTHING except the garment(s) from the second image. Reproduce every detail of the garment(s) faithfully: pattern, print, color, fabric texture, cut, and fit. ${STUDIO_SUFFIX}`;
   }
 
   // Person wearing separate top+bottom (no conflict for top or bottom)
@@ -228,16 +228,17 @@ async function extractGarment(imageBase64, garmentDescription) {
 
   const client = getClient();
 
-  const prompt = `You are a professional garment extraction system. The image shows a person/model wearing a garment${garmentDescription ? ` (${garmentDescription})` : ""}.
+  const isSet = garmentDescription && garmentDescription.includes("COMPLETE SET");
+  const prompt = `You are a professional garment extraction system. The image shows a person/model wearing ${isSet ? "a complete outfit/set" : "a garment"}${garmentDescription ? ` (${garmentDescription})` : ""}.
 
-Your task: Generate a NEW image showing ONLY the garment by itself, completely removed from the person. The garment should be displayed as a clean, flat product shot on a plain white background — as if it were laid flat or photographed on an invisible mannequin.
+Your task: Generate a NEW image showing ONLY the ${isSet ? "complete outfit (ALL pieces — top AND bottom)" : "garment"} by itself, completely removed from the person. The ${isSet ? "outfit pieces should be displayed together" : "garment should be displayed"} as a clean, flat product shot on a plain white background — as if ${isSet ? "they were" : "it were"} laid flat or photographed on an invisible mannequin.
 
 CRITICAL RULES:
 - Remove the person/model entirely — NO face, skin, hands, legs, or body parts should be visible
-- Show ONLY the garment itself, preserving its exact color, pattern, texture, design details, and proportions
-- Display the garment in a natural flat-lay or front-facing product orientation
+- ${isSet ? "Show ALL pieces of the outfit together (e.g., both the top AND the bottom/shorts). Do NOT extract only one piece — you MUST include every garment piece visible on the model." : "Show ONLY the garment itself, preserving its exact color, pattern, texture, design details, and proportions"}
+- Display in a natural flat-lay or front-facing product orientation
 - Use a clean, plain white background
-- The garment should fill most of the frame
+- The ${isSet ? "outfit pieces" : "garment"} should fill most of the frame
 - Photorealistic result. Output only the resulting image.`;
 
   const response = await client.models.generateContent({
