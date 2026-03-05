@@ -1623,7 +1623,7 @@ function initStella() {
   let socket = null;
   let mediaStream = null;
   let audioContext = null;
-  let processorNode = null;
+  let workletNode = null;
   let sourceNode = null;
   let playbackCtx = null;
   let playbackQueue = [];
@@ -1743,8 +1743,8 @@ function initStella() {
   // Forward search/outfit results from extension tabs to voice socket
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'SEARCH_RESULTS_LOADED' && socket && socket.connected) {
-      socket.emit('searchResultsLoaded', { products: msg.products });
-      console.log('[Stella] Forwarded search results to voice session:', msg.products?.length);
+      socket.emit('searchResultsLoaded', { products: msg.products, screenshot: msg.screenshot || null });
+      console.log('[Stella] Forwarded search results to voice session:', msg.products?.length, 'screenshot:', !!msg.screenshot);
     }
     if (msg.type === 'OUTFIT_RESULTS_LOADED' && socket && socket.connected) {
       socket.emit('outfitResultsLoaded', { tops: msg.tops, bottoms: msg.bottoms, shoes: msg.shoes });
@@ -1758,29 +1758,24 @@ function initStella() {
       audio: { sampleRate: INPUT_SAMPLE_RATE, channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
     audioContext = new AudioContext({ sampleRate: INPUT_SAMPLE_RATE });
+    await audioContext.audioWorklet.addModule('audio-processor.js');
     sourceNode = audioContext.createMediaStreamSource(mediaStream);
-    processorNode = audioContext.createScriptProcessor(CHUNK_SIZE, 1, 1);
+    workletNode = new AudioWorkletNode(audioContext, 'audio-capture-processor');
 
-    processorNode.onaudioprocess = (e) => {
+    workletNode.port.onmessage = (e) => {
       if (!isSessionActive || !socket) return;
-      const float32 = e.inputBuffer.getChannelData(0);
-      const int16 = new Int16Array(float32.length);
-      for (let i = 0; i < float32.length; i++) {
-        const s = Math.max(-1, Math.min(1, float32[i]));
-        int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-      }
-      const bytes = new Uint8Array(int16.buffer);
+      const bytes = new Uint8Array(e.data);
       let binary = '';
       for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
       socket.emit('audioInput', btoa(binary));
     };
 
-    sourceNode.connect(processorNode);
-    processorNode.connect(audioContext.destination);
+    sourceNode.connect(workletNode);
+    workletNode.connect(audioContext.destination);
   }
 
   function stopAudioCapture() {
-    if (processorNode) { processorNode.disconnect(); processorNode = null; }
+    if (workletNode) { workletNode.disconnect(); workletNode = null; }
     if (sourceNode) { sourceNode.disconnect(); sourceNode = null; }
     if (audioContext) { audioContext.close(); audioContext = null; }
     if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }

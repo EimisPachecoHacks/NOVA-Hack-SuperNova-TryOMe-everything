@@ -209,7 +209,7 @@ body {
 .accessory-item {
   position: relative;
   flex: 0 0 auto;
-  width: 64px;
+  width: 76px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -219,8 +219,8 @@ body {
 }
 .accessory-item:hover { transform: translateY(-2px); }
 .accessory-item-img {
-  width: 56px;
-  height: 56px;
+  width: 68px;
+  height: 68px;
   border-radius: 8px;
   overflow: hidden;
   background: #111;
@@ -275,6 +275,54 @@ body {
   z-index: 10;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
+
+/* ---------------------------------------------------------------------------
+   Lightbox (full-size image popup)
+   --------------------------------------------------------------------------- */
+.vw-lightbox {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 500;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.vw-lightbox.active { display: flex; }
+.vw-lightbox-backdrop {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+}
+.vw-lightbox-content {
+  position: relative;
+  max-width: 90%;
+  max-height: 90%;
+}
+.vw-lightbox-img {
+  max-width: 100%;
+  max-height: 88vh;
+  border-radius: 8px;
+  box-shadow: 0 4px 30px rgba(255, 153, 0, 0.3);
+}
+.vw-lightbox-close {
+  position: absolute;
+  top: -14px; right: -14px;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: #FF9900;
+  color: #fff;
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: background 0.2s;
+}
+.vw-lightbox-close:hover { background: #E88B00; }
 
 /* ---------------------------------------------------------------------------
    Walls (left = tops, right = bottoms)
@@ -523,6 +571,7 @@ body {
   height: 100%;
   object-fit: cover;
   border-radius: 3px;
+  cursor: zoom-in;
 }
 .mirror-placeholder {
   text-align: center;

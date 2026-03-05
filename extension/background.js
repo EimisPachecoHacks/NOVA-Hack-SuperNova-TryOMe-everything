@@ -344,6 +344,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           break;
         }
 
+        case "CAPTURE_TAB_SCREENSHOT": {
+          try {
+            const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+            if (tab) {
+              const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 85 });
+              sendResponse(dataUrl);
+            } else {
+              sendResponse(null);
+            }
+          } catch (err) {
+            console.warn("[background] Screenshot capture failed:", err.message);
+            sendResponse(null);
+          }
+          break;
+        }
+
         case "API_CALL": {
           const method = (message.method || "").toUpperCase();
           const endpoint = message.endpoint;

@@ -242,53 +242,64 @@ IMPORTANT: Return ONLY valid JSON, no additional text.`;
  * Nova 2 Lite in a single call.
  *
  * @param {string} userPhotoBase64 - User's body photo (base64)
- * @param {Array} productImages - [{ number, imageBase64, title, price }]
+ * @param {Array} productData - [{ number, title, price, rating, reviewCount }]
  * @param {object} userProfile - { sex, clothesSize, shoesSize }
+ * @param {string|null} screenshotBase64 - screenshot of the results page (optional)
  * @returns {Array} [{ number, score, reason }]
  */
-async function recommendItems(userPhotoBase64, productImages, userProfile) {
+async function recommendItems(userPhotoBase64, productData, userProfile, screenshotBase64 = null) {
   const sex = userProfile?.sex || "unknown";
   const size = userProfile?.clothesSize || "unknown";
 
-  // Build image content blocks: user photo first, then product images
-  const contentBlocks = [
-    {
-      image: {
-        format: detectImageFormat(userPhotoBase64),
-        source: { bytes: Buffer.from(userPhotoBase64, "base64") },
-      },
-    },
-    { text: "IMAGE 0: This is the USER's body photo. Analyze their body type, skin tone, and overall style.\n" },
-  ];
+  const contentBlocks = [];
 
-  for (const product of productImages) {
+  // 1. User's body photo
+  contentBlocks.push({
+    image: {
+      format: detectImageFormat(userPhotoBase64),
+      source: { bytes: Buffer.from(userPhotoBase64, "base64") },
+    },
+  });
+  contentBlocks.push({ text: "IMAGE 1: This is the USER's body photo. Analyze their body type, skin tone, and overall style.\n" });
+
+  // 2. Screenshot of the results page (shows all products visually with numbers, prices, images)
+  if (screenshotBase64) {
     contentBlocks.push({
       image: {
-        format: detectImageFormat(product.imageBase64),
-        source: { bytes: Buffer.from(product.imageBase64, "base64") },
+        format: detectImageFormat(screenshotBase64),
+        source: { bytes: Buffer.from(screenshotBase64, "base64") },
       },
     });
-    contentBlocks.push({
-      text: `IMAGE ${product.number}: "${product.title}" — ${product.price || "no price"}\n`,
-    });
+    contentBlocks.push({ text: "IMAGE 2: This is a screenshot of the search results page showing all the products the user is browsing. Each product has a numbered badge, image, title, and price visible. Use this to visually assess the colors, styles, and patterns of each product.\n" });
   }
 
+  // 3. Structured product data for ALL items (up to 20)
+  const productList = productData.map((p) =>
+    `#${p.number}: "${p.title}" — ${p.price || "no price"}${p.rating ? ` — ${p.rating} stars` : ""}${p.reviewCount ? ` (${p.reviewCount} reviews)` : ""}`
+  ).join("\n");
+
   contentBlocks.push({
-    text: `Based on the user's photo (IMAGE 0), analyze each product image and recommend which items would look best on this person. Consider body type, skin tone, color harmony, and style compatibility.
+    text: `Here are ALL ${productData.length} products to analyze:
+
+${productList}
+
+Based on the user's photo (IMAGE 1)${screenshotBase64 ? " and the results page screenshot (IMAGE 2)" : ""}, recommend which items would look best on this person. Consider body type, skin tone, color harmony, style compatibility, and value (ratings/reviews).
 
 The user is ${sex}, size ${size}.
 
-Return a JSON array sorted from BEST to WORST match:
+Return a JSON array sorted from BEST to WORST match. Include ALL ${productData.length} items:
 [
   { "number": 3, "score": 9, "reason": "The warm coral tone beautifully complements your skin, and the V-neck flatters your frame" },
   { "number": 1, "score": 7, "reason": "Classic cut works well, but the cool white might wash you out slightly" },
   ...
 ]
 
-Include ALL items. Score 1-10. Reasons should be personal and specific to THIS user's appearance — reference their body type, skin tone, coloring. Be like a honest stylist friend.
+Score 1-10. Reasons should be personal and specific to THIS user's appearance — reference their body type, skin tone, coloring. Be like an honest stylist friend. Also factor in ratings and review counts as a quality signal.
 
 IMPORTANT: Return ONLY valid JSON array, no additional text.`,
   });
+
+  console.log(`[novaLite] recommendItems: ${productData.length} products, screenshot: ${!!screenshotBase64}, user: ${sex} size ${size}`);
 
   const response = await bedrockClient.send(
     new ConverseCommand({
@@ -296,10 +307,10 @@ IMPORTANT: Return ONLY valid JSON array, no additional text.`,
       messages: [{ role: "user", content: contentBlocks }],
       system: [
         {
-          text: "You are an expert personal stylist AI. You analyze a person's photo and product images to give honest, personalized fashion recommendations. You consider body type, skin tone, face shape, current style, and color theory. Your recommendations are specific to the person — never generic.",
+          text: "You are an expert personal stylist AI. You analyze a person's photo and product images to give honest, personalized fashion recommendations. You consider body type, skin tone, face shape, current style, and color theory. When a screenshot of the results page is provided, use it to visually assess each product's colors, patterns, and style. Your recommendations are specific to the person — never generic.",
         },
       ],
-      inferenceConfig: { maxTokens: 1024, temperature: 0.3 },
+      inferenceConfig: { maxTokens: 2048, temperature: 0.3 },
     })
   );
 

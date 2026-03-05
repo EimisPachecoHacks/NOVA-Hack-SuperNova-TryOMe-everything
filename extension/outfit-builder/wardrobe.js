@@ -47,6 +47,29 @@ document.getElementById("animateBtn").addEventListener("click", handleAnimate);
 document.getElementById("buyBtn").addEventListener("click", handleBuyOnAmazon);
 document.getElementById("errorCloseBtn").addEventListener("click", () => window.close());
 
+// Lightbox — click mirror photo or result to view full size
+const lightbox = document.getElementById("wardrobeLightbox");
+const lightboxImg = document.getElementById("lightboxImg");
+function openLightbox(src) {
+  lightboxImg.src = src;
+  lightbox.classList.add("active");
+}
+function closeLightbox() {
+  lightbox.classList.remove("active");
+  lightboxImg.src = "";
+}
+document.getElementById("lightboxClose").addEventListener("click", closeLightbox);
+document.getElementById("lightboxBackdrop").addEventListener("click", closeLightbox);
+document.getElementById("mirrorPhoto").addEventListener("click", function () {
+  if (this.src) openLightbox(this.src);
+});
+document.getElementById("mirrorResult").addEventListener("click", function () {
+  if (this.src) openLightbox(this.src);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && lightbox.classList.contains("active")) closeLightbox();
+});
+
 // Clean up large base64 data on page unload
 window.addEventListener("unload", () => {
   lastTryOnResultBase64 = null;
@@ -573,11 +596,14 @@ async function handleTryOn() {
       selectedPoseIndex = photos.selectedPoseIndex || 0;
     }
 
-    // Build the list of garments to try on
+    // Build the list of garments to try on (clothing + accessories)
     const garmentItems = [];
     if (selectedTop) garmentItems.push({ item: selectedTop, garmentClass: "UPPER_BODY", label: "upper wear" });
     if (selectedBottom) garmentItems.push({ item: selectedBottom, garmentClass: "LOWER_BODY", label: "lower wear" });
     if (selectedShoes) garmentItems.push({ item: selectedShoes, garmentClass: "SHOES", label: "shoes" });
+    if (selectedNecklace) garmentItems.push({ item: selectedNecklace, garmentClass: "NECKLACE", label: "necklace" });
+    if (selectedEarrings) garmentItems.push({ item: selectedEarrings, garmentClass: "EARRINGS", label: "earrings" });
+    if (selectedBracelet) garmentItems.push({ item: selectedBracelet, garmentClass: "BRACELET", label: "bracelet" });
 
     // Fetch ALL garment images in parallel
     updateTryOnStatus(`Fetching ${garmentItems.length} garment images...`);

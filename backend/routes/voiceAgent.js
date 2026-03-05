@@ -9,6 +9,7 @@
 const { SonicSession } = require("../services/novaSonic");
 const { recommendItems } = require("../services/novaLite");
 const { fetchPhotoFromS3 } = require("../services/s3");
+const { getProfile } = require("../services/dynamodb");
 const https = require("https");
 const http = require("http");
 const jwt = require("jsonwebtoken");
@@ -32,7 +33,9 @@ Your capabilities:
 IMPORTANT: Always respond in {{LANGUAGE}}. All your speech output must be in {{LANGUAGE}}.
 However, ALL tool call arguments (queries, titles, descriptions) MUST always be in English, regardless of the conversation language. This is critical because searches and product lookups are performed on Amazon.com which requires English. For example, if the user says "busca un vestido rojo" in Spanish, you should call smart_search with query "red dress", NOT "vestido rojo". Always translate tool arguments to English.
 
-Search results and outfit builder items are numbered. When the user refers to an item by number (e.g., "try on number 3", "I like the second one"), use select_search_item (for smart search) or select_outfit_items (for outfit builder).
+Search results and outfit builder items are numbered (1-based). When the user refers to an item by number (e.g., "try on number 3", "I like the second one"), use select_search_item (for smart search) or select_outfit_items (for outfit builder).
+
+IMPORTANT: When calling try_on, ALWAYS include product_number if you know the item's number from search results or recommendations. This ensures the correct product is selected. The numbers are 1-based (item 1 is the first result, item 2 is the second, etc.).
 
 You can visually analyze search results and outfit items to make personalized recommendations based on the user's actual appearance. When the user asks "which one should I try?", "what do you recommend?", "what looks best on me?", or similar, use recommend_items. This analyzes their photo against the product images and returns personalized style advice. Always reference the visual analysis in your recommendations — mention specific details about why an item suits them (skin tone, body type, color harmony).
 
@@ -112,6 +115,10 @@ const TOOLS = [
           product_title: {
             type: "string",
             description: "Title/description of the product",
+          },
+          product_number: {
+            type: "integer",
+            description: "The item number from search results (1-based, e.g. 1 for first item, 2 for second). Use this when referring to a numbered search result.",
           },
         },
         required: ["product_title"],
@@ -388,14 +395,62 @@ async function executeTool(toolName, argsJson, socket) {
     }
 
     case "try_on": {
+      // Resolve product from cached search results
+      const cached = socket._voiceSearchResults || [];
+      let resolvedNumber = args.product_number || null;
+      let resolvedTitle = args.product_title;
+      let productUrl = args.product_url || null;
+
+      if (cached.length > 0) {
+        let match = null;
+        // 1. Look up by item number (most reliable)
+        if (resolvedNumber && resolvedNumber > 0) {
+          match = cached.find((p) => p.number === resolvedNumber);
+          if (match) console.log(`[VoiceAgent] Resolved product by number #${resolvedNumber}: "${match.title}"`);
+        }
+        // 2. Fall back to title matching
+        if (!match && args.product_title) {
+          const titleLower = args.product_title.toLowerCase();
+          match = cached.find(
+            (p) => p.title && p.title.toLowerCase().includes(titleLower)
+          ) || cached.find(
+            (p) => p.title && titleLower.includes(p.title.toLowerCase().slice(0, 30))
+          );
+          if (match) console.log(`[VoiceAgent] Resolved product by title match: "${match.title}"`);
+        }
+        if (match) {
+          resolvedNumber = match.number;
+          resolvedTitle = match.title || resolvedTitle;
+          productUrl = match.productUrl || productUrl;
+        }
+      }
+
+      // If we have a product number from search results, use select_search_item
+      // which triggers handleTryOn() in the results page (actual try-on flow)
+      if (resolvedNumber && cached.length > 0) {
+        console.log(`[VoiceAgent] Routing try_on to select_search_item #${resolvedNumber}`);
+        const ack = await emitAndWaitForAck(socket, {
+          action: "select_search_item",
+          number: resolvedNumber,
+        });
+        return {
+          status: "success",
+          message: `Starting virtual try-on for item #${resolvedNumber} "${resolvedTitle}". The result will appear on the product page.`,
+          acknowledged: !!ack.acknowledged,
+        };
+      }
+
+      // Fallback: open the product URL directly
       const ack = await emitAndWaitForAck(socket, {
         action: "try_on",
-        productTitle: args.product_title,
-        productUrl: args.product_url || null,
+        productTitle: resolvedTitle,
+        productUrl,
       });
       return {
         status: "success",
-        message: `Starting virtual try-on for "${args.product_title}". The result will appear on the product page.`,
+        message: productUrl
+          ? `Starting virtual try-on for "${resolvedTitle}". The result will appear on the product page.`
+          : `Could not find the product URL for "${resolvedTitle}". Please search for this item first, then try again.`,
         acknowledged: !!ack.acknowledged,
       };
     }
@@ -487,6 +542,7 @@ async function executeTool(toolName, argsJson, socket) {
       // Get cached search/outfit results from socket session state
       const searchResults = socket._voiceSearchResults || [];
       const outfitResults = socket._voiceOutfitResults || null;
+      const searchScreenshot = socket._voiceSearchScreenshot || null;
       const userId = socket._voiceUserId || null;
       const userProfile = socket._voiceUserProfile || {};
 
@@ -503,39 +559,44 @@ async function executeTool(toolName, argsJson, socket) {
       }
 
       try {
-        // Fetch user's body photo from S3
-        const userPhotoKey = `users/${userId}/body.jpg`;
-        const userPhotoBase64 = await fetchPhotoFromS3(userPhotoKey);
-
-        // Fetch product images (limit to top 8)
-        const topItems = items.slice(0, 8);
-        const productImages = [];
-        for (const item of topItems) {
-          try {
-            const imgBase64 = await fetchImageAsBase64(item.imageUrl);
-            productImages.push({
-              number: item.number,
-              imageBase64: imgBase64,
-              title: item.title,
-              price: item.price || "",
-            });
-          } catch (err) {
-            console.warn(`[VoiceAgent] Failed to fetch image for item #${item.number}:`, err.message);
-          }
+        // Fetch user's body photo from S3 using profile keys
+        const profile = await getProfile(userId);
+        let userPhotoBase64 = null;
+        if (profile?.generatedPhotoKeys?.length > 0) {
+          userPhotoBase64 = await fetchPhotoFromS3(profile.generatedPhotoKeys[0]);
+        } else if (profile?.bodyPhotoKey) {
+          userPhotoBase64 = await fetchPhotoFromS3(profile.bodyPhotoKey);
+        }
+        if (!userPhotoBase64) {
+          return { status: "error", message: "Could not find your photo. Please set up your profile first." };
         }
 
-        if (productImages.length === 0) {
-          return { status: "error", message: "Could not fetch any product images for analysis." };
+        // Extract screenshot base64 (strip data URI prefix)
+        let screenshotBase64 = null;
+        if (searchScreenshot) {
+          screenshotBase64 = searchScreenshot.startsWith("data:")
+            ? searchScreenshot.split(",")[1]
+            : searchScreenshot;
+          console.log(`[VoiceAgent] Using page screenshot (${screenshotBase64.length} chars) for recommendation`);
         }
 
-        console.log(`[VoiceAgent] Analyzing ${productImages.length} products against user photo...`);
-        const rankings = await recommendItems(userPhotoBase64, productImages, userProfile);
+        // Build structured product data for ALL items (up to 20)
+        const productData = items.slice(0, 20).map((item) => ({
+          number: item.number,
+          title: item.title,
+          price: item.price || "",
+          rating: item.rating || "",
+          reviewCount: item.reviewCount || "",
+        }));
+
+        console.log(`[VoiceAgent] Analyzing ${productData.length} products (screenshot: ${!!screenshotBase64}) against user photo...`);
+        const rankings = await recommendItems(userPhotoBase64, productData, userProfile, screenshotBase64);
         console.log(`[VoiceAgent] Recommendation results:`, JSON.stringify(rankings));
 
         return {
           status: "success",
           recommendations: rankings,
-          message: `Analyzed ${productImages.length} items against the user's photo. Here are personalized recommendations ranked from best to worst match.`,
+          message: `Analyzed ${productData.length} items against the user's photo. Here are personalized recommendations ranked from best to worst match.`,
         };
       } catch (err) {
         console.error("[VoiceAgent] recommend_items error:", err.message);
@@ -717,7 +778,12 @@ function setupVoiceAgent(io) {
     socket.on("searchResultsLoaded", (data) => {
       if (data && data.products) {
         socket._voiceSearchResults = data.products;
-        console.log(`[VoiceAgent] Cached ${data.products.length} search results for recommendations`);
+        if (data.screenshot) {
+          socket._voiceSearchScreenshot = data.screenshot;
+          console.log(`[VoiceAgent] Cached ${data.products.length} search results + screenshot for recommendations`);
+        } else {
+          console.log(`[VoiceAgent] Cached ${data.products.length} search results (no screenshot)`);
+        }
       }
     });
 

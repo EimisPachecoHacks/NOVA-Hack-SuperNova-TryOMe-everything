@@ -179,18 +179,27 @@ function renderResults(products, elapsedSeconds) {
     grid.appendChild(createProductCard(product, index));
   });
 
-  // Send product data to voice agent for visual recommendations
+  // Send product data + screenshot to voice agent for visual recommendations
   try {
-    chrome.runtime.sendMessage({
-      type: "SEARCH_RESULTS_LOADED",
-      products: products.slice(0, 20).map((p, i) => ({
-        number: i + 1,
-        title: p.title || "",
-        imageUrl: p.image_url || "",
-        price: p.price || "",
-        rating: p.rating || "",
-      })),
-    });
+    const productData = products.slice(0, 20).map((p, i) => ({
+      number: i + 1,
+      title: p.title || "",
+      imageUrl: p.image_url || "",
+      productUrl: p.product_url || "",
+      price: p.price || "",
+      rating: p.rating || "",
+      reviewCount: p.review_count || "",
+    }));
+    // Capture a screenshot of the results page after images load
+    setTimeout(() => {
+      chrome.runtime.sendMessage({ type: "CAPTURE_TAB_SCREENSHOT" }, (screenshotDataUrl) => {
+        chrome.runtime.sendMessage({
+          type: "SEARCH_RESULTS_LOADED",
+          products: productData,
+          screenshot: screenshotDataUrl || null,
+        });
+      });
+    }, 1500); // wait for product images to render
   } catch (_) { /* popup may not be open */ }
 }
 
