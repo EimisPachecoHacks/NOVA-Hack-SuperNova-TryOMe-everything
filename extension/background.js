@@ -194,6 +194,20 @@ async function proxyImageFetch(imageUrl) {
   const response = await fetch(imageUrl);
   const blob = await response.blob();
 
+  // Convert AVIF/WebP to JPEG — Bedrock doesn't support AVIF
+  if (blob.type && !blob.type.match(/^image\/(jpeg|png)$/)) {
+    const bitmap = await createImageBitmap(blob);
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(bitmap, 0, 0);
+    const jpegBlob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.92 });
+    const buffer = await jpegBlob.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  }
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -395,9 +409,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
         // Voice Agent tool actions — forwarded from the voice agent page
         case "VOICE_SMART_SEARCH": {
-          const searchUrl = chrome.runtime.getURL(
-            `smart-search/results.html?q=${encodeURIComponent(message.query)}`
-          );
+          let voiceSearchUrl = `smart-search/results.html?q=${encodeURIComponent(message.query)}`;
+          if (message.sex) voiceSearchUrl += `&sex=${encodeURIComponent(message.sex)}`;
+          if (message.clothesSize) voiceSearchUrl += `&clothesSize=${encodeURIComponent(message.clothesSize)}`;
+          if (message.shoesSize) voiceSearchUrl += `&shoesSize=${encodeURIComponent(message.shoesSize)}`;
+          const searchUrl = chrome.runtime.getURL(voiceSearchUrl);
           chrome.tabs.create({ url: searchUrl });
           sendResponse({ data: { opened: true } });
           break;
@@ -480,16 +496,54 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
 
         case "VOICE_ANIMATE": {
-          // Read last try-on result and trigger video generation on active tab
-          const tryOnData = (await chrome.storage.local.get("lastTryOn")).lastTryOn;
-          if (!tryOnData || !tryOnData.resultImage) {
-            sendResponse({ error: "No try-on result to animate" });
-            break;
-          }
-          // Send to active tab's content script to click the Animate button
-          const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-          if (activeTab) {
-            chrome.tabs.sendMessage(activeTab.id, { type: "VOICE_CLICK_ANIMATE" });
+          // Send to search results tab (where voice try-on modal lives)
+          const allAnimTabs = await chrome.tabs.query({});
+          console.log("[background] VOICE_ANIMATE — searching for target tab among", allAnimTabs.length, "tabs");
+          // Log all tab URLs for debugging
+          allAnimTabs.forEach(t => {
+            if (t.url && (t.url.includes("smart-search") || t.url.includes("amazon.com"))) {
+              console.log("[background] VOICE_ANIMATE — candidate tab:", t.id, t.url?.substring(0, 100));
+            }
+          });
+          const searchAnimTab = allAnimTabs
+            .filter(t => t.url && t.url.includes("smart-search/results.html"))
+            .sort((a, b) => b.id - a.id)[0];
+          if (searchAnimTab) {
+            console.log("[background] VOICE_ANIMATE — sending VOICE_CLICK_ANIMATE to search results tab:", searchAnimTab.id);
+            try {
+              const resp = await chrome.tabs.sendMessage(searchAnimTab.id, { type: "VOICE_CLICK_ANIMATE" });
+              console.log("[background] VOICE_ANIMATE — response from results tab:", JSON.stringify(resp));
+            } catch (err) {
+              console.error("[background] VOICE_ANIMATE — ERROR sending to results tab:", err.message);
+              // Tab might have lost its listener — try reloading and retrying
+              console.log("[background] VOICE_ANIMATE — tab may have lost listener, trying Amazon tab fallback");
+              const amazonAnimTab = allAnimTabs
+                .filter(t => t.url && t.url.includes("amazon.com") && t.url.includes("/dp/"))
+                .sort((a, b) => b.id - a.id)[0];
+              if (amazonAnimTab) {
+                try {
+                  await chrome.tabs.sendMessage(amazonAnimTab.id, { type: "VOICE_CLICK_ANIMATE" });
+                } catch (e2) {
+                  console.error("[background] VOICE_ANIMATE — Amazon tab fallback also failed:", e2.message);
+                }
+              }
+            }
+          } else {
+            console.warn("[background] VOICE_ANIMATE — NO search results tab found!");
+            // Fallback: try Amazon product tab (content script)
+            const amazonAnimTab = allAnimTabs
+              .filter(t => t.url && t.url.includes("amazon.com") && t.url.includes("/dp/"))
+              .sort((a, b) => b.id - a.id)[0];
+            if (amazonAnimTab) {
+              console.log("[background] VOICE_ANIMATE — sending to Amazon tab fallback:", amazonAnimTab.id);
+              try {
+                await chrome.tabs.sendMessage(amazonAnimTab.id, { type: "VOICE_CLICK_ANIMATE" });
+              } catch (err) {
+                console.error("[background] VOICE_ANIMATE — Amazon tab also failed:", err.message);
+              }
+            } else {
+              console.error("[background] VOICE_ANIMATE — NO target tab found at all!");
+            }
           }
           sendResponse({ data: { status: "ok" } });
           break;

@@ -55,7 +55,7 @@ npm ci --production 2>&1 | tail -3
 # Install Python dependencies for smart search
 echo "📥 Installing Python dependencies..."
 cd python-services
-python3 -m venv venv 2>/dev/null || python3 -m venv venv
+python3.11 -m venv venv 2>/dev/null || python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt -q 2>&1 | tail -3
 deactivate

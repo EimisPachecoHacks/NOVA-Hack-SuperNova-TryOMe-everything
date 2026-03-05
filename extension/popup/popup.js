@@ -1716,6 +1716,7 @@ function initStella() {
 
     socket.on('error', (data) => {
       console.error('[Stella] Error:', data.message);
+      toolBar.hidden = true;
       const isTimeout = data.message && data.message.toLowerCase().includes('timed out');
       if (isTimeout && isSessionActive) {
         appendTranscript('system', 'Connection hiccup — reconnecting...');
@@ -1897,10 +1898,14 @@ function initStella() {
 
   // Tool action handler
   function handleToolAction(data) {
+    // Acknowledge the tool action so the voice agent knows we received it
+    if (socket && socket.connected) {
+      socket.emit('toolAck', { action: data.action, acknowledged: true });
+    }
     if (typeof chrome !== 'undefined' && chrome.runtime) {
       switch (data.action) {
         case 'smart_search':
-          chrome.runtime.sendMessage({ type: 'VOICE_SMART_SEARCH', query: data.query });
+          chrome.runtime.sendMessage({ type: 'VOICE_SMART_SEARCH', query: data.query, sex: data.sex, clothesSize: data.clothesSize, shoesSize: data.shoesSize });
           appendTranscript('system', 'Searching: "' + data.query + '"');
           break;
         case 'try_on':
@@ -1924,7 +1929,10 @@ function initStella() {
           appendTranscript('system', 'Saving video...');
           break;
         case 'animate_tryon':
-          chrome.runtime.sendMessage({ type: 'VOICE_ANIMATE' });
+          console.log('[Stella] handleToolAction: animate_tryon — sending VOICE_ANIMATE to background');
+          chrome.runtime.sendMessage({ type: 'VOICE_ANIMATE' }, (resp) => {
+            console.log('[Stella] VOICE_ANIMATE response from background:', JSON.stringify(resp));
+          });
           appendTranscript('system', 'Generating animation...');
           break;
         case 'download':

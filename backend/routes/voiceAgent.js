@@ -383,9 +383,13 @@ async function executeTool(toolName, argsJson, socket) {
 
   switch (toolName) {
     case "smart_search": {
+      const profile = socket._voiceUserProfile || {};
       const ack = await emitAndWaitForAck(socket, {
         action: "smart_search",
         query: args.query,
+        sex: profile.sex || null,
+        clothesSize: profile.clothesSize || null,
+        shoesSize: profile.shoesSize || null,
       });
       return {
         status: "success",
@@ -511,7 +515,9 @@ async function executeTool(toolName, argsJson, socket) {
     }
 
     case "animate_tryon": {
+      console.log("[VoiceAgent] animate_tryon — emitting toolAction to client");
       const ack = await emitAndWaitForAck(socket, { action: "animate_tryon" });
+      console.log("[VoiceAgent] animate_tryon — ack received:", JSON.stringify(ack));
       return {
         status: "success",
         message: "Generating an animation from your try-on. This may take a moment.",

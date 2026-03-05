@@ -145,51 +145,77 @@ async function virtualTryOn(sourceImageBase64, referenceImageBase64, garmentClas
   console.log(`\x1b[34m  │ model:\x1b[0m        \x1b[1m${modelId}\x1b[0m`);
   console.log(`\x1b[34m  └─── CALLING GEMINI API... ───┘\x1b[0m`);
 
-  const response = await client.models.generateContent({
-    model: modelId,
-    contents: [
-      {
-        role: "user",
-        parts: [
-          { text: "This is the person. Keep this EXACT person — same face, skin, body, hair:" },
-          {
-            inlineData: {
-              mimeType: "image/jpeg",
-              data: sourceImageBase64,
+  const MAX_ATTEMPTS = 2;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const response = await client.models.generateContent({
+      model: modelId,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: "This is the person. Keep this EXACT person — same face, skin, body, hair:" },
+            {
+              inlineData: {
+                mimeType: "image/jpeg",
+                data: sourceImageBase64,
+              },
             },
-          },
-          { text: "This is the garment to put on the person above:" },
-          {
-            inlineData: {
-              mimeType: "image/jpeg",
-              data: referenceImageBase64,
+            { text: "This is the garment to put on the person above:" },
+            {
+              inlineData: {
+                mimeType: "image/jpeg",
+                data: referenceImageBase64,
+              },
             },
-          },
-          { text: prompt },
-        ],
+            { text: attempt === 1 ? prompt : `CRITICAL: You MUST change the person's clothing. The person in IMAGE 1 is currently wearing different clothes — you MUST replace their current outfit with the garment shown in IMAGE 2. Do NOT return the person in their original clothing. The output image MUST show the person wearing the NEW garment.\n\n${prompt}` },
+          ],
+        },
+      ],
+      config: {
+        responseModalities: ["TEXT", "IMAGE"],
+        systemInstruction: "You are a virtual clothing try-on system. You will receive exactly 2 images: IMAGE 1 is a real person (the customer), IMAGE 2 is a garment. Your ONLY job is to produce a single photo-realistic image of the EXACT same person from IMAGE 1 wearing the garment from IMAGE 2. IDENTITY RULE: The output person must have the IDENTICAL face, facial bone structure, nose, eyes, eyebrows, lips, skin color, hair color, hair style, and body proportions as IMAGE 1. Do NOT replace them with a model, do NOT alter their facial features, do NOT change their skin tone. If you cannot preserve the identity perfectly, try harder — identity fidelity is the #1 priority, above all else.",
       },
-    ],
-    config: {
-      responseModalities: ["TEXT", "IMAGE"],
-      systemInstruction: "You are a virtual clothing try-on system. You will receive exactly 2 images: IMAGE 1 is a real person (the customer), IMAGE 2 is a garment. Your ONLY job is to produce a single photo-realistic image of the EXACT same person from IMAGE 1 wearing the garment from IMAGE 2. IDENTITY RULE: The output person must have the IDENTICAL face, facial bone structure, nose, eyes, eyebrows, lips, skin color, hair color, hair style, and body proportions as IMAGE 1. Do NOT replace them with a model, do NOT alter their facial features, do NOT change their skin tone. If you cannot preserve the identity perfectly, try harder — identity fidelity is the #1 priority, above all else.",
-    },
-  });
+    });
 
-  // Extract the image from the response
-  const candidates = response.candidates || [];
-  if (!candidates.length) {
-    throw new Error("No response from Gemini");
-  }
-
-  const parts = candidates[0].content?.parts || [];
-  for (const part of parts) {
-    if (part.inlineData) {
-      console.log(`\x1b[32m  ✓ GEMINI RESPONSE RECEIVED\x1b[0m — image: ${part.inlineData.data.length} chars`);
-      return part.inlineData.data;
+    // Extract the image from the response
+    const candidates = response.candidates || [];
+    if (!candidates.length) {
+      if (attempt < MAX_ATTEMPTS) {
+        console.log(`\x1b[33m  ⟳ GEMINI attempt ${attempt} returned no candidates — retrying...\x1b[0m`);
+        continue;
+      }
+      throw new Error("No response from Gemini");
     }
+
+    const parts = candidates[0].content?.parts || [];
+    let resultData = null;
+    for (const part of parts) {
+      if (part.inlineData) {
+        resultData = part.inlineData.data;
+        break;
+      }
+    }
+
+    if (!resultData) {
+      if (attempt < MAX_ATTEMPTS) {
+        console.log(`\x1b[33m  ⟳ GEMINI attempt ${attempt} returned no image — retrying...\x1b[0m`);
+        continue;
+      }
+      throw new Error("No image in Gemini response");
+    }
+
+    // Validate: check if result is suspiciously similar in size to source (garment not applied)
+    const sizeDiff = Math.abs(resultData.length - sourceImageBase64.length) / sourceImageBase64.length;
+    if (sizeDiff < 0.05 && attempt < MAX_ATTEMPTS) {
+      console.log(`\x1b[33m  ⟳ GEMINI attempt ${attempt} result too similar to source (${(sizeDiff * 100).toFixed(1)}% size diff) — retrying with stronger prompt...\x1b[0m`);
+      continue;
+    }
+
+    console.log(`\x1b[32m  ✓ GEMINI RESPONSE RECEIVED\x1b[0m (attempt ${attempt}) — image: ${resultData.length} chars, sizeDiff: ${(sizeDiff * 100).toFixed(1)}%`);
+    return resultData;
   }
 
-  throw new Error("No image in Gemini response");
+  throw new Error("Gemini try-on failed after all attempts");
 }
 
 /**

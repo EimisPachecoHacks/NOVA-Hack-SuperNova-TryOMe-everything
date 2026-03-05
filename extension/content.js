@@ -167,10 +167,16 @@
   // ---------------------------------------------------------------------------
   // Voice command handlers — triggered from background.js via Stella voice agent
   // ---------------------------------------------------------------------------
-  chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === "VOICE_CLICK_ANIMATE") {
       const animBtn = document.querySelector(".nova-tryon-animate-btn");
-      if (animBtn && !animBtn.disabled) animBtn.click();
+      if (animBtn && !animBtn.disabled) {
+        animBtn.click();
+        sendResponse({ clicked: true });
+      } else {
+        sendResponse({ clicked: false });
+      }
+      return true;
     } else if (msg.type === "VOICE_CLICK_DOWNLOAD") {
       if (msg.downloadType === "video") {
         const dlBtn = document.querySelector(".nova-tryon-download-video-btn");
