@@ -6,8 +6,10 @@
   "permissions": [
     "storage",
     "activeTab",
+    "tabs",
     "sidePanel",
-    "contextMenus"
+    "contextMenus",
+    "scripting"
   ],
   "host_permissions": [
     "https://www.amazon.com/*",

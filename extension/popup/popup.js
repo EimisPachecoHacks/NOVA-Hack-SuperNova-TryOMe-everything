@@ -1928,12 +1928,19 @@ function initStella() {
           chrome.runtime.sendMessage({ type: 'VOICE_SAVE_VIDEO' });
           appendTranscript('system', 'Saving video...');
           break;
-        case 'animate_tryon':
-          console.log('[Stella] handleToolAction: animate_tryon — sending VOICE_ANIMATE to background');
-          chrome.runtime.sendMessage({ type: 'VOICE_ANIMATE' }, (resp) => {
-            console.log('[Stella] VOICE_ANIMATE response from background:', JSON.stringify(resp));
+        case 'animate_tryon': {
+          const traceId = 'anim_' + Date.now();
+          console.log(`%c[ANIMATE TRACE ${traceId}] Step 1/4: popup.js received animate_tryon toolAction`, 'color: #FF6600; font-weight: bold; font-size: 14px');
+          console.log(`[ANIMATE TRACE ${traceId}] Sending VOICE_ANIMATE to background.js now...`);
+          chrome.runtime.sendMessage({ type: 'VOICE_ANIMATE', traceId }, (resp) => {
+            console.log(`%c[ANIMATE TRACE ${traceId}] Step 1/4 RESPONSE from background: ${JSON.stringify(resp)}`, 'color: #FF6600; font-weight: bold');
+            if (chrome.runtime.lastError) {
+              console.error(`[ANIMATE TRACE ${traceId}] chrome.runtime.lastError:`, chrome.runtime.lastError.message);
+            }
           });
           appendTranscript('system', 'Generating animation...');
+          break;
+        }
           break;
         case 'download':
           chrome.runtime.sendMessage({ type: 'VOICE_DOWNLOAD', downloadType: data.downloadType || 'image' });

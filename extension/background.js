@@ -496,56 +496,72 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
 
         case "VOICE_ANIMATE": {
-          // Send to search results tab (where voice try-on modal lives)
+          const tid = message.traceId || 'no_trace';
+          console.log(`%c[ANIMATE TRACE ${tid}] Step 2/4: background.js received VOICE_ANIMATE`, 'color: #FF6600; font-weight: bold; font-size: 14px');
+
           const allAnimTabs = await chrome.tabs.query({});
-          console.log("[background] VOICE_ANIMATE — searching for target tab among", allAnimTabs.length, "tabs");
-          // Log all tab URLs for debugging
-          allAnimTabs.forEach(t => {
-            if (t.url && (t.url.includes("smart-search") || t.url.includes("amazon.com"))) {
-              console.log("[background] VOICE_ANIMATE — candidate tab:", t.id, t.url?.substring(0, 100));
-            }
-          });
-          const searchAnimTab = allAnimTabs
-            .filter(t => t.url && t.url.includes("smart-search/results.html"))
-            .sort((a, b) => b.id - a.id)[0];
+          const extensionTabs = allAnimTabs.filter(t => t.url && t.url.includes("smart-search/results.html"));
+          const amazonTabs = allAnimTabs.filter(t => t.url && t.url.includes("amazon.com") && t.url.includes("/dp/"));
+          console.log(`[ANIMATE TRACE ${tid}] Found ${extensionTabs.length} search results tabs, ${amazonTabs.length} Amazon tabs, ${allAnimTabs.length} total tabs`);
+          if (extensionTabs.length === 0) {
+            console.log(`%c[ANIMATE TRACE ${tid}] WARNING: 0 search tabs! Dumping ALL tab URLs:`, 'color: #FF0000; font-weight: bold');
+            allAnimTabs.forEach(t => console.log(`[ANIMATE TRACE ${tid}]   tab ${t.id}: url=${t.url?.substring(0, 120) || 'UNDEFINED'}`));
+          }
+          extensionTabs.forEach(t => console.log(`[ANIMATE TRACE ${tid}]   search tab: id=${t.id} url=${t.url?.substring(0, 80)}`));
+
+          const searchAnimTab = extensionTabs.sort((a, b) => b.id - a.id)[0];
+
           if (searchAnimTab) {
-            console.log("[background] VOICE_ANIMATE — sending VOICE_CLICK_ANIMATE to search results tab:", searchAnimTab.id);
+            console.log(`[ANIMATE TRACE ${tid}] Step 3/4: sendMessage VOICE_CLICK_ANIMATE to tab ${searchAnimTab.id}`);
             try {
-              const resp = await chrome.tabs.sendMessage(searchAnimTab.id, { type: "VOICE_CLICK_ANIMATE" });
-              console.log("[background] VOICE_ANIMATE — response from results tab:", JSON.stringify(resp));
+              const resp = await chrome.tabs.sendMessage(searchAnimTab.id, { type: "VOICE_CLICK_ANIMATE", traceId: tid });
+              console.log(`%c[ANIMATE TRACE ${tid}] Step 3/4 response from results tab: ${JSON.stringify(resp)}`, 'color: #FF6600; font-weight: bold');
+              sendResponse({ data: { status: "ok", resp } });
             } catch (err) {
-              console.error("[background] VOICE_ANIMATE — ERROR sending to results tab:", err.message);
-              // Tab might have lost its listener — try reloading and retrying
-              console.log("[background] VOICE_ANIMATE — tab may have lost listener, trying Amazon tab fallback");
-              const amazonAnimTab = allAnimTabs
-                .filter(t => t.url && t.url.includes("amazon.com") && t.url.includes("/dp/"))
-                .sort((a, b) => b.id - a.id)[0];
-              if (amazonAnimTab) {
-                try {
-                  await chrome.tabs.sendMessage(amazonAnimTab.id, { type: "VOICE_CLICK_ANIMATE" });
-                } catch (e2) {
-                  console.error("[background] VOICE_ANIMATE — Amazon tab fallback also failed:", e2.message);
-                }
-              }
+              console.error(`%c[ANIMATE TRACE ${tid}] sendMessage FAILED: ${err.message}`, 'color: #FF0000; font-weight: bold; font-size: 14px');
+              sendResponse({ data: { status: "error", error: err.message } });
             }
           } else {
-            console.warn("[background] VOICE_ANIMATE — NO search results tab found!");
-            // Fallback: try Amazon product tab (content script)
-            const amazonAnimTab = allAnimTabs
-              .filter(t => t.url && t.url.includes("amazon.com") && t.url.includes("/dp/"))
-              .sort((a, b) => b.id - a.id)[0];
+            // Fallback: try Amazon product tab
+            const amazonAnimTab = amazonTabs.sort((a, b) => b.id - a.id)[0];
             if (amazonAnimTab) {
-              console.log("[background] VOICE_ANIMATE — sending to Amazon tab fallback:", amazonAnimTab.id);
+              console.log(`[ANIMATE TRACE ${tid}] No search tab — trying Amazon tab ${amazonAnimTab.id} url: ${amazonAnimTab.url?.substring(0, 80)}`);
               try {
-                await chrome.tabs.sendMessage(amazonAnimTab.id, { type: "VOICE_CLICK_ANIMATE" });
+                const amazonResults = await chrome.scripting.executeScript({
+                  target: { tabId: amazonAnimTab.id },
+                  func: () => {
+                    const animBtn = document.querySelector(".nova-tryon-animate-btn");
+                    const allBtns = document.querySelectorAll("button");
+                    const novaBtns = Array.from(allBtns).filter(b => b.className.includes('nova'));
+                    const info = {
+                      animBtnFound: !!animBtn,
+                      animBtnDisabled: animBtn?.disabled,
+                      animBtnText: animBtn?.textContent?.substring(0, 50),
+                      novaBtns: novaBtns.map(b => ({ class: b.className, text: b.textContent?.substring(0, 30), disabled: b.disabled })),
+                    };
+                    console.log('%c[ANIMATE TRACE] Amazon tab DOM state:', 'color: #FF6600; font-weight: bold; font-size: 14px', JSON.stringify(info, null, 2));
+                    if (animBtn && !animBtn.disabled) {
+                      console.log('%c[ANIMATE TRACE] CLICKING Amazon animate button!', 'color: #00CC00; font-weight: bold; font-size: 16px');
+                      animBtn.click();
+                      return { clicked: true, info };
+                    }
+                    console.log('%c[ANIMATE TRACE] Amazon animate button NOT clickable', 'color: #FF0000; font-weight: bold; font-size: 16px');
+                    return { clicked: false, info };
+                  },
+                });
+                console.log(`%c[ANIMATE TRACE ${tid}] Amazon executeScript result:`, 'color: #FF6600; font-weight: bold', JSON.stringify(amazonResults));
+                sendResponse({ data: { status: "ok", source: "amazon", results: amazonResults } });
               } catch (err) {
-                console.error("[background] VOICE_ANIMATE — Amazon tab also failed:", err.message);
+                console.error(`[ANIMATE TRACE ${tid}] Amazon fallback failed:`, err.message);
+                sendResponse({ data: { status: "error", error: err.message } });
               }
             } else {
-              console.error("[background] VOICE_ANIMATE — NO target tab found at all!");
+              console.error(`%c[ANIMATE TRACE ${tid}] NO TARGET TAB FOUND AT ALL`, 'color: #FF0000; font-weight: bold; font-size: 16px');
+              // Log ALL tab URLs to diagnose
+              allAnimTabs.forEach(t => console.log(`[ANIMATE TRACE ${tid}]   tab ${t.id}: ${t.url?.substring(0, 100) || 'NO URL'}`));
+              sendResponse({ data: { status: "error", error: "no_tab_found" } });
             }
           }
-          sendResponse({ data: { status: "ok" } });
           break;
         }
 

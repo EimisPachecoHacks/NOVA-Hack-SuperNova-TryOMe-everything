@@ -26,7 +26,7 @@ Your capabilities:
 4. **Style Advice** — Give honest, encouraging fashion tips.
 5. **Save to Favorites** — Save the current try-on result to the user's favorites. Use save_favorite when they say "save this", "add to favorites", etc.
 6. **Save Video** — Save a generated animation/video. Use save_video when they say "save this video", "keep this animation", etc.
-7. **Animate Try-On** — Generate a short video animation from the current try-on result. Use animate_tryon when they say "animate this", "make a video", "show me moving", etc.
+7. **Animate Try-On** — Generate a short video animation from the current try-on result. ONLY use animate_tryon when the user EXPLICITLY asks for animation (e.g., "animate this", "make a video", "show me moving"). NEVER call animate_tryon on your own initiative — wait for the user to request it.
 8. **Download** — Download the current try-on image or video to the user's computer. Use download when they say "download this", "save to my computer", etc.
 9. **Share/Send** — Share or send the current try-on result. Use send_tryon when they say "send this", "share this", etc.
 
@@ -515,9 +515,10 @@ async function executeTool(toolName, argsJson, socket) {
     }
 
     case "animate_tryon": {
-      console.log("[VoiceAgent] animate_tryon — emitting toolAction to client");
+      const animTraceId = 'anim_' + Date.now();
+      console.log(`\x1b[33m[ANIMATE TRACE ${animTraceId}] Step 0/4: Backend emitting toolAction { action: "animate_tryon" } to popup via Socket.IO\x1b[0m`);
       const ack = await emitAndWaitForAck(socket, { action: "animate_tryon" });
-      console.log("[VoiceAgent] animate_tryon — ack received:", JSON.stringify(ack));
+      console.log(`\x1b[33m[ANIMATE TRACE ${animTraceId}] Ack from popup: ${JSON.stringify(ack)} (acknowledged=${!!ack.acknowledged}, timedOut=${!ack.acknowledged})\x1b[0m`);
       return {
         status: "success",
         message: "Generating an animation from your try-on. This may take a moment.",
