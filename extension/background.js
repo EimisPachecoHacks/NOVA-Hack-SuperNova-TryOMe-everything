@@ -501,15 +501,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
           const allAnimTabs = await chrome.tabs.query({});
           const extensionTabs = allAnimTabs.filter(t => t.url && t.url.includes("smart-search/results.html"));
+          const wardrobeTabs = allAnimTabs.filter(t => t.url && t.url.includes("outfit-builder/wardrobe.html"));
           const amazonTabs = allAnimTabs.filter(t => t.url && t.url.includes("amazon.com") && t.url.includes("/dp/"));
-          console.log(`[ANIMATE TRACE ${tid}] Found ${extensionTabs.length} search results tabs, ${amazonTabs.length} Amazon tabs, ${allAnimTabs.length} total tabs`);
-          if (extensionTabs.length === 0) {
-            console.log(`%c[ANIMATE TRACE ${tid}] WARNING: 0 search tabs! Dumping ALL tab URLs:`, 'color: #FF0000; font-weight: bold');
+          console.log(`[ANIMATE TRACE ${tid}] Found ${extensionTabs.length} search tabs, ${wardrobeTabs.length} wardrobe tabs, ${amazonTabs.length} Amazon tabs`);
+          if (extensionTabs.length === 0 && wardrobeTabs.length === 0) {
+            console.log(`%c[ANIMATE TRACE ${tid}] WARNING: 0 search/wardrobe tabs! Dumping ALL tab URLs:`, 'color: #FF0000; font-weight: bold');
             allAnimTabs.forEach(t => console.log(`[ANIMATE TRACE ${tid}]   tab ${t.id}: url=${t.url?.substring(0, 120) || 'UNDEFINED'}`));
           }
-          extensionTabs.forEach(t => console.log(`[ANIMATE TRACE ${tid}]   search tab: id=${t.id} url=${t.url?.substring(0, 80)}`));
 
-          const searchAnimTab = extensionTabs.sort((a, b) => b.id - a.id)[0];
+          // Prefer wardrobe tab if it exists (outfit builder flow), else use search tab
+          const searchAnimTab = wardrobeTabs.sort((a, b) => b.id - a.id)[0] || extensionTabs.sort((a, b) => b.id - a.id)[0];
 
           if (searchAnimTab) {
             console.log(`[ANIMATE TRACE ${tid}] Step 3/4: sendMessage VOICE_CLICK_ANIMATE to tab ${searchAnimTab.id}`);
@@ -614,6 +615,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
               topNumber: message.topNumber,
               bottomNumber: message.bottomNumber,
               shoesNumber: message.shoesNumber,
+              necklaceNumber: message.necklaceNumber,
+              earringsNumber: message.earringsNumber,
+              braceletsNumber: message.braceletsNumber,
             });
           }
           sendResponse({ data: { status: "ok" } });

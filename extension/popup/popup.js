@@ -1748,7 +1748,7 @@ function initStella() {
       console.log('[Stella] Forwarded search results to voice session:', msg.products?.length, 'screenshot:', !!msg.screenshot);
     }
     if (msg.type === 'OUTFIT_RESULTS_LOADED' && socket && socket.connected) {
-      socket.emit('outfitResultsLoaded', { tops: msg.tops, bottoms: msg.bottoms, shoes: msg.shoes });
+      socket.emit('outfitResultsLoaded', { tops: msg.tops, bottoms: msg.bottoms, shoes: msg.shoes, necklaces: msg.necklaces, earrings: msg.earrings, bracelets: msg.bracelets });
       console.log('[Stella] Forwarded outfit results to voice session');
     }
   });
@@ -1851,6 +1851,7 @@ function initStella() {
         voiceId,
         language: userLang,
         authToken,
+        firstName: cachedProfile?.firstName || null,
         sex: cachedProfile?.sex || null,
         clothesSize: cachedProfile?.clothesSize || null,
         shoesSize: cachedProfile?.shoesSize || null,
@@ -1960,12 +1961,18 @@ function initStella() {
             topNumber: data.topNumber || null,
             bottomNumber: data.bottomNumber || null,
             shoesNumber: data.shoesNumber || null,
+            necklaceNumber: data.necklaceNumber || null,
+            earringsNumber: data.earringsNumber || null,
+            braceletsNumber: data.braceletsNumber || null,
           });
           {
             const selParts = [];
             if (data.topNumber) selParts.push('top #' + data.topNumber);
             if (data.bottomNumber) selParts.push('bottom #' + data.bottomNumber);
             if (data.shoesNumber) selParts.push('shoes #' + data.shoesNumber);
+            if (data.necklaceNumber) selParts.push('necklace #' + data.necklaceNumber);
+            if (data.earringsNumber) selParts.push('earrings #' + data.earringsNumber);
+            if (data.braceletsNumber) selParts.push('bracelets #' + data.braceletsNumber);
             appendTranscript('system', 'Selecting ' + selParts.join(', ') + ' for try-on...');
           }
           break;

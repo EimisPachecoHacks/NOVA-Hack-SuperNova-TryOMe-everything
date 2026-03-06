@@ -716,6 +716,19 @@ async function handleAnimateResult(body, base64Image, btn, product) {
 
     videoContainer.appendChild(btnRow);
     body.appendChild(videoContainer);
+
+    // Store last video context for voice "save video" command
+    chrome.storage.local.set({
+      lastVideo: {
+        videoUrl: videoSrc.startsWith("data:") ? null : videoSrc,
+        videoBase64: videoSrc.startsWith("data:") ? videoSrc.split(",")[1] : null,
+        productId: product.productId || product.asin || "",
+        productTitle: product.title || "",
+        productImage: product.image_url || "",
+        timestamp: Date.now(),
+      }
+    });
+
     btn.innerHTML = "&#9654; Animate";
     btn.disabled = false;
   } catch (err) {

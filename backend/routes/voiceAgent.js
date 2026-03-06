@@ -22,7 +22,7 @@ const SYSTEM_PROMPT = `You are Stella, a stylish and upbeat AI personal stylist 
 Your capabilities:
 1. **Smart Search** — Search Amazon for clothing items. Use smart_search when users describe what they want.
 2. **Virtual Try-On** — Let users see how a garment looks on them. Use try_on when they want to try something.
-3. **Outfit Builder** — Build complete outfits (top, bottom, shoes, and optional accessories like necklaces, earrings, bracelets). Use build_outfit for full looks.
+3. **Outfit Builder** — Build complete outfits with 6 categories: top, bottom, shoes, necklace, earrings, and bracelets. Use build_outfit for full looks. IMPORTANT: When build_outfit is confirmed and executed, it searches Amazon and displays NUMBERED items in EACH category in the wardrobe tab. These items have numbers (1, 2, 3...) just like smart_search results. The user can then say "top number 3" or "necklace number 2" to select items. Use select_outfit_items with category and number to select them. You do NOT need to run smart_search again — the outfit builder already did the search.
 4. **Style Advice** — Give honest, encouraging fashion tips.
 5. **Save to Favorites** — Save the current try-on result to the user's favorites. Use save_favorite when they say "save this", "add to favorites", etc.
 6. **Save Video** — Save a generated animation/video. Use save_video when they say "save this video", "keep this animation", etc.
@@ -34,6 +34,10 @@ IMPORTANT: Always respond in {{LANGUAGE}}. All your speech output must be in {{L
 However, ALL tool call arguments (queries, titles, descriptions) MUST always be in English, regardless of the conversation language. This is critical because searches and product lookups are performed on Amazon.com which requires English. For example, if the user says "busca un vestido rojo" in Spanish, you should call smart_search with query "red dress", NOT "vestido rojo". Always translate tool arguments to English.
 
 Search results and outfit builder items are numbered (1-based). When the user refers to an item by number (e.g., "try on number 3", "I like the second one"), use select_search_item (for smart search) or select_outfit_items (for outfit builder).
+
+OUTFIT ITEM SELECTION: select_outfit_items takes ONE category and ONE number per call. If the user says "top number 2 and necklace number 3", call select_outfit_items TWICE: first with category="top" number=2, then with category="necklace" number=3. Valid categories: top, bottom, shoes, necklace, earrings, bracelets.
+
+OUTFIT CONFIRMATION RULE: When you call build_outfit or select_outfit_items, items are NOTED but NOT executed yet. After calling, tell the user what has been noted and ask "Are you ready or do you want to add more?" When the user confirms (says "yes", "go ahead", "sí", etc.), you MUST call confirm_outfit — NEVER call smart_search or any other tool. Once build_outfit has been called, the ONLY valid next tools are: build_outfit (to add more items), select_outfit_items (to select by number), or confirm_outfit (to execute). NEVER use smart_search to search individual categories from a pending outfit. confirm_outfit will REJECT if categories are missing. You can ONLY use skip_missing=true when the user EXPLICITLY said they do NOT want those items (e.g., "no accessories", "skip that", "just those three").
 
 IMPORTANT: When calling try_on, ALWAYS include product_number if you know the item's number from search results or recommendations. This ensures the correct product is selected. The numbers are 1-based (item 1 is the first result, item 2 is the second, etc.).
 
@@ -49,7 +53,7 @@ CRITICAL BUILD_OUTFIT RULE:
 
 USER PROFILE:
 {{USER_PROFILE}}
-IMPORTANT: Always use the user's sex to filter searches automatically. If the user is female, search for "women's" items. If male, search for "men's" items. NEVER show items for the wrong gender. NEVER ask the user their sex or size — you already know from their profile. When relevant, include their clothing size or shoe size in search queries or recommendations.
+IMPORTANT: Use the user's name naturally in conversation (e.g., "Great choice, Maria!" or "Here you go, Maria!"). Always use the user's sex to filter searches automatically. If the user is female, search for "women's" items. If male, search for "men's" items. NEVER show items for the wrong gender. NEVER ask the user their sex or size — you already know from their profile. When relevant, include their clothing size or shoe size in search queries or recommendations.
 
 Your personality:
 - You're enthusiastic but genuine — never fake or overly salesy.
@@ -128,7 +132,7 @@ const TOOLS = [
   {
     name: "build_outfit",
     description:
-      "Build a complete outfit by searching for a top, bottom, and optionally shoes and accessories. Use when the user wants a full outfit or coordinated look.",
+      "Build a complete outfit by searching for a top, bottom, shoes, and accessories (necklace, earrings, bracelets). CRITICAL: NEVER call this tool immediately. ALWAYS first ask the user 'Are these all the items or do you want to add more?' and wait for their confirmation before calling this tool.",
     inputSchema: {
       json: JSON.stringify({
         type: "object",
@@ -282,25 +286,39 @@ const TOOLS = [
   {
     name: "select_outfit_items",
     description:
-      "Select specific items by their numbers in the outfit builder and trigger a try-on. Use when the user refers to outfit items by number, e.g. 'top number 2, bottom number 1, shoes number 3'. At least one category must be specified.",
+      "Select ONE item by its category and number in the outfit builder. Call this tool ONCE for EACH item the user mentions. For example, if the user says 'top number 2 and necklace number 3', call this tool TWICE: once with category='top' number=2, and once with category='necklace' number=3. Category mapping: 'upper part'/'upper'/'top' → 'top', 'lower part'/'lower'/'bottom'/'pants'/'skirt' → 'bottom', 'shoes'/'footwear'/'sneakers' → 'shoes', 'necklace'/'chain' → 'necklace', 'earrings' → 'earrings', 'bracelet'/'bracelets'/'bangle' → 'bracelets'.",
     inputSchema: {
       json: JSON.stringify({
         type: "object",
         properties: {
-          top_number: {
-            type: "integer",
+          category: {
+            type: "string",
+            enum: ["top", "bottom", "shoes", "necklace", "earrings", "bracelets"],
             description:
-              "The number of the top/upper wear item to select (1-based)",
+              "The outfit category. MUST be one of: top, bottom, shoes, necklace, earrings, bracelets.",
           },
-          bottom_number: {
+          number: {
             type: "integer",
             description:
-              "The number of the bottom/lower wear item to select (1-based)",
+              "The 1-based item number to select in that category.",
           },
-          shoes_number: {
-            type: "integer",
+        },
+        required: ["category", "number"],
+      }),
+    },
+  },
+  {
+    name: "confirm_outfit",
+    description:
+      "Execute the pending outfit action. Call ONLY after the user explicitly confirms (e.g., 'yes', 'go ahead', 'that's it', 'done'). If any of the 6 categories are still missing, you MUST set skip_missing=true — this is ONLY allowed when the user explicitly said they do NOT want those items (e.g., 'no accessories', 'just clothes', 'skip the rest', 'I don't want earrings'). If the user has NOT explicitly declined the missing categories, do NOT call confirm_outfit — instead ask about the missing categories first.",
+    inputSchema: {
+      json: JSON.stringify({
+        type: "object",
+        properties: {
+          skip_missing: {
+            type: "boolean",
             description:
-              "The number of the shoes item to select (1-based)",
+              "Set to true ONLY if the user explicitly said they do NOT want the missing categories (e.g., 'no accessories', 'skip necklace', 'just those'). If false or omitted, confirm_outfit will be rejected when categories are missing.",
           },
         },
         required: [],
@@ -460,26 +478,44 @@ async function executeTool(toolName, argsJson, socket) {
     }
 
     case "build_outfit": {
-      const ack = await emitAndWaitForAck(socket, {
-        action: "build_outfit",
-        top: args.top,
-        bottom: args.bottom,
-        shoes: args.shoes || null,
-        necklace: args.necklace || null,
-        earrings: args.earrings || null,
-        bracelets: args.bracelets || null,
-      });
+      // Phase 1: Accumulate — do NOT execute yet
+      const pending = socket._pendingOutfitAction || { type: "build_outfit", args: {} };
+      pending.type = "build_outfit";
+      if (args.top) pending.args.top = args.top;
+      if (args.bottom) pending.args.bottom = args.bottom;
+      if (args.shoes) pending.args.shoes = args.shoes;
+      if (args.necklace) pending.args.necklace = args.necklace;
+      if (args.earrings) pending.args.earrings = args.earrings;
+      if (args.bracelets) pending.args.bracelets = args.bracelets;
+      pending.timestamp = Date.now();
+      socket._pendingOutfitAction = pending;
+
       const parts = [];
-      if (args.top) parts.push(`top="${args.top}"`);
-      if (args.bottom) parts.push(`bottom="${args.bottom}"`);
-      if (args.shoes) parts.push(`shoes="${args.shoes}"`);
-      if (args.necklace) parts.push(`necklace="${args.necklace}"`);
-      if (args.earrings) parts.push(`earrings="${args.earrings}"`);
-      if (args.bracelets) parts.push(`bracelets="${args.bracelets}"`);
+      if (pending.args.top) parts.push(`top: "${pending.args.top}"`);
+      if (pending.args.bottom) parts.push(`bottom: "${pending.args.bottom}"`);
+      if (pending.args.shoes) parts.push(`shoes: "${pending.args.shoes}"`);
+      if (pending.args.necklace) parts.push(`necklace: "${pending.args.necklace}"`);
+      if (pending.args.earrings) parts.push(`earrings: "${pending.args.earrings}"`);
+      if (pending.args.bracelets) parts.push(`bracelets: "${pending.args.bracelets}"`);
+      console.log(`[VoiceAgent] build_outfit NOTED (not executed):`, JSON.stringify(pending.args));
+      socket._awaitingOutfitConfirmation = true;
+      socket._outfitGateSetAt = Date.now();
+
+      const missing = [];
+      if (!pending.args.top) missing.push("top");
+      if (!pending.args.bottom) missing.push("bottom");
+      if (!pending.args.shoes) missing.push("shoes");
+      if (!pending.args.necklace) missing.push("necklace");
+      if (!pending.args.earrings) missing.push("earrings");
+      if (!pending.args.bracelets) missing.push("bracelets");
+
+      const missingMsg = missing.length > 0
+        ? ` Still missing: ${missing.join(", ")}. Ask the user about these categories, especially accessories (necklace, earrings, bracelets).`
+        : " All 6 categories are filled.";
+
       return {
         status: "success",
-        message: `Opening the Outfit Builder with: ${parts.join(", ")}. The wardrobe will appear in a new tab.`,
-        acknowledged: !!ack.acknowledged,
+        message: `Items noted so far: ${parts.join(", ")}.${missingMsg} Do NOT call confirm_outfit yet — wait for the user to speak and confirm they are done.`,
       };
     }
 
@@ -558,7 +594,7 @@ async function executeTool(toolName, argsJson, socket) {
       }
 
       const items = outfitResults
-        ? [...(outfitResults.tops || []), ...(outfitResults.bottoms || []), ...(outfitResults.shoes || [])]
+        ? [...(outfitResults.tops || []), ...(outfitResults.bottoms || []), ...(outfitResults.shoes || []), ...(outfitResults.necklaces || []), ...(outfitResults.earrings || []), ...(outfitResults.bracelets || [])]
         : searchResults;
 
       if (!items || items.length === 0) {
@@ -624,21 +660,107 @@ async function executeTool(toolName, argsJson, socket) {
     }
 
     case "select_outfit_items": {
-      const ack = await emitAndWaitForAck(socket, {
+      console.log(`[VoiceAgent] select_outfit_items RAW args from Nova:`, JSON.stringify(args));
+
+      // New format: category + number (one item per call, no parameter confusion)
+      const cat = (args.category || "").toLowerCase().trim();
+      const num = parseInt(args.number, 10);
+      const validCategories = ["top", "bottom", "shoes", "necklace", "earrings", "bracelets"];
+
+      if (!cat || !validCategories.includes(cat) || !num || num < 1) {
+        console.warn(`[VoiceAgent] select_outfit_items INVALID: category="${cat}", number=${num}`);
+        return {
+          status: "error",
+          message: `Invalid category "${cat}" or number ${num}. Category must be one of: ${validCategories.join(", ")}. Number must be 1 or greater.`,
+        };
+      }
+
+      // Send selection directly to the wardrobe — no confirmation needed for item selection
+      const selectionPayload = {
         action: "select_outfit_items",
-        topNumber: args.top_number || null,
-        bottomNumber: args.bottom_number || null,
-        shoesNumber: args.shoes_number || null,
-      });
-      const parts = [];
-      if (args.top_number) parts.push(`top #${args.top_number}`);
-      if (args.bottom_number) parts.push(`bottom #${args.bottom_number}`);
-      if (args.shoes_number) parts.push(`shoes #${args.shoes_number}`);
+        topNumber: cat === "top" ? num : null,
+        bottomNumber: cat === "bottom" ? num : null,
+        shoesNumber: cat === "shoes" ? num : null,
+        necklaceNumber: cat === "necklace" ? num : null,
+        earringsNumber: cat === "earrings" ? num : null,
+        braceletsNumber: cat === "bracelets" ? num : null,
+      };
+      console.log(`[VoiceAgent] select_outfit_items EXECUTING selection: ${cat} #${num}`);
+      socket.emit("toolAction", selectionPayload);
+
       return {
         status: "success",
-        message: `Selecting ${parts.join(", ")} in the outfit builder and trying on.`,
-        acknowledged: !!ack.acknowledged,
+        message: `Selected ${cat} #${num} in the outfit builder. The item is now highlighted in the wardrobe.`,
       };
+    }
+
+    case "confirm_outfit": {
+      // Gate: reject if user hasn't spoken since the last accumulation
+      if (socket._awaitingOutfitConfirmation) {
+        console.log(`[VoiceAgent] confirm_outfit BLOCKED — user has not spoken since last accumulation. Waiting for user audio.`);
+        return {
+          status: "error",
+          message: "You must wait for the user to respond before confirming. Ask the user if they want to add more items or if they are ready to proceed, then WAIT for their verbal response before calling confirm_outfit.",
+        };
+      }
+
+      const pendingAction = socket._pendingOutfitAction;
+      if (!pendingAction) {
+        return {
+          status: "error",
+          message: "No pending outfit action to confirm. Ask the user what they'd like to do.",
+        };
+      }
+
+      // Check if all 6 categories are filled — reject if missing (unless user explicitly skipped)
+      const skipMissing = args.skip_missing === true;
+      if (pendingAction.type === "build_outfit") {
+        const missingCats = [];
+        if (!pendingAction.args.top) missingCats.push("top");
+        if (!pendingAction.args.bottom) missingCats.push("bottom");
+        if (!pendingAction.args.shoes) missingCats.push("shoes");
+        if (!pendingAction.args.necklace) missingCats.push("necklace");
+        if (!pendingAction.args.earrings) missingCats.push("earrings");
+        if (!pendingAction.args.bracelets) missingCats.push("bracelets");
+        if (missingCats.length > 0 && !skipMissing) {
+          console.log(`[VoiceAgent] confirm_outfit REJECTED — missing categories: ${missingCats.join(", ")}`);
+          return {
+            status: "error",
+            message: `Cannot confirm yet — still missing: ${missingCats.join(", ")}. Ask the user about these categories. If the user explicitly says they do NOT want them, call confirm_outfit with skip_missing=true.`,
+          };
+        }
+      }
+
+      // Clear pending before executing
+      socket._pendingOutfitAction = null;
+
+      if (pendingAction.type === "build_outfit") {
+        console.log(`[VoiceAgent] confirm_outfit executing build_outfit:`, JSON.stringify(pendingAction.args));
+        const ack = await emitAndWaitForAck(socket, {
+          action: "build_outfit",
+          top: pendingAction.args.top || null,
+          bottom: pendingAction.args.bottom || null,
+          shoes: pendingAction.args.shoes || null,
+          necklace: pendingAction.args.necklace || null,
+          earrings: pendingAction.args.earrings || null,
+          bracelets: pendingAction.args.bracelets || null,
+        });
+        const parts = [];
+        if (pendingAction.args.top) parts.push(`top="${pendingAction.args.top}"`);
+        if (pendingAction.args.bottom) parts.push(`bottom="${pendingAction.args.bottom}"`);
+        if (pendingAction.args.shoes) parts.push(`shoes="${pendingAction.args.shoes}"`);
+        if (pendingAction.args.necklace) parts.push(`necklace="${pendingAction.args.necklace}"`);
+        if (pendingAction.args.earrings) parts.push(`earrings="${pendingAction.args.earrings}"`);
+        if (pendingAction.args.bracelets) parts.push(`bracelets="${pendingAction.args.bracelets}"`);
+        return {
+          status: "success",
+          message: `Opening the Outfit Builder with: ${parts.join(", ")}. The wardrobe is now searching Amazon for each category and will display NUMBERED items (1, 2, 3...) in each category: tops, bottoms, shoes, necklaces, earrings, bracelets. Once items load, the user can say "top number 3" or "necklace number 2" etc. to select items. Use select_outfit_items with the category and number to select them. You DO NOT need to do any additional smart_search — the outfit builder already searched for all categories.`,
+          acknowledged: !!ack.acknowledged,
+        };
+      }
+
+
+      return { status: "error", message: "Unknown pending action type." };
     }
 
     default:
@@ -698,15 +820,20 @@ function setupVoiceAgent(io) {
         }
         socket._voiceUserId = userId;
         socket._voiceUserProfile = {
+          firstName: config?.firstName || null,
           sex: config?.sex || null,
           clothesSize: config?.clothesSize || null,
           shoesSize: config?.shoesSize || null,
         };
         socket._voiceSearchResults = [];
         socket._voiceOutfitResults = null;
+        socket._pendingOutfitAction = null;
+        socket._awaitingOutfitConfirmation = false;
+        socket._outfitGateSetAt = 0;
 
         // Build user profile context
         const profileParts = [];
+        if (config?.firstName) profileParts.push(`Name: ${config.firstName}`);
         if (config?.sex) profileParts.push(`Sex: ${config.sex}`);
         if (config?.clothesSize) profileParts.push(`Clothing size: ${config.clothesSize}`);
         if (config?.shoesSize) profileParts.push(`Shoe size: ${config.shoesSize}`);
@@ -726,6 +853,20 @@ function setupVoiceAgent(io) {
 
         session.onTextOutput = (text, role) => {
           socket.emit("textOutput", { text, role });
+          // Clear the outfit confirmation gate when user actually speaks
+          // (not on raw audioInput, which fires continuously even with silence)
+          if ((role === "USER" || role === "user") && socket._awaitingOutfitConfirmation) {
+            // Only clear the gate if at least 3s have passed since it was set.
+            // This prevents residual transcription chunks from the SAME utterance
+            // that triggered build_outfit/select_outfit_items from clearing the gate.
+            const elapsed = Date.now() - (socket._outfitGateSetAt || 0);
+            if (elapsed >= 3000) {
+              console.log(`[VoiceAgent] User spoke after accumulation (${elapsed}ms since gate) — confirm_outfit now allowed. User said: "${text}"`);
+              socket._awaitingOutfitConfirmation = false;
+            } else {
+              console.log(`[VoiceAgent] User transcription arrived ${elapsed}ms after gate — too soon, ignoring (residual chunk). Text: "${text}"`);
+            }
+          }
         };
 
         session.onToolUse = async (toolName, toolUseId, content) => {
@@ -797,8 +938,8 @@ function setupVoiceAgent(io) {
     socket.on("outfitResultsLoaded", (data) => {
       if (data) {
         socket._voiceOutfitResults = data;
-        const count = (data.tops?.length || 0) + (data.bottoms?.length || 0) + (data.shoes?.length || 0);
-        console.log(`[VoiceAgent] Cached ${count} outfit items for recommendations`);
+        const count = (data.tops?.length || 0) + (data.bottoms?.length || 0) + (data.shoes?.length || 0) + (data.necklaces?.length || 0) + (data.earrings?.length || 0) + (data.bracelets?.length || 0);
+        console.log(`[VoiceAgent] Cached ${count} outfit items (including accessories) for recommendations`);
       }
     });
 

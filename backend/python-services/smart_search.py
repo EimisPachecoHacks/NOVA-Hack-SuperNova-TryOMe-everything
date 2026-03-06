@@ -224,6 +224,15 @@ def smart_search(query: str, headless: bool = True) -> list[dict]:
                     log(f"  Error scrolling: {e}")
                     break
 
+    # Filter: only keep products with 4+ star rating (or unknown rating)
+    before_filter = len(all_products)
+    all_products = [
+        p for p in all_products
+        if not p.rating or float(p.rating) >= 4.0
+    ]
+    if before_filter != len(all_products):
+        log(f"Rating filter: {before_filter} → {len(all_products)} (removed {before_filter - len(all_products)} below 4★)")
+
     # Trim to target count
     final_products = all_products[:TARGET_PRODUCT_COUNT]
     log(f"Search complete. Returning {len(final_products)} products.")
