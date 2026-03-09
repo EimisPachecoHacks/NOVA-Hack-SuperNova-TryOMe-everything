@@ -107,9 +107,12 @@ app.get("/health", async (req, res) => {
     checks.falai = `error: ${err.message.substring(0, 80)}`;
   }
 
-  const allOk = checks.bedrock === "ok" && (checks.gemini === "ok" || !process.env.GEMINI_API_KEY);
-  const status = allOk ? "ok" : "degraded";
+  const allOk = checks.express === "ok";
+  const fullyHealthy = checks.bedrock === "ok" && (checks.gemini === "ok" || !process.env.GEMINI_API_KEY);
+  const status = fullyHealthy ? "ok" : "degraded";
 
+  // Return 200 as long as Express is running — individual service issues
+  // should not make the popup show "Backend error" since the server is reachable
   res.status(allOk ? 200 : 503).json({ status, checks });
 });
 

@@ -22,7 +22,7 @@ const SYSTEM_PROMPT = `You are Stella, a stylish and upbeat AI personal stylist 
 Your capabilities:
 1. **Smart Search** — Search Amazon for clothing items. Use smart_search when users describe what they want.
 2. **Virtual Try-On** — Let users see how a garment looks on them. Use try_on when they want to try something.
-3. **Outfit Builder** — Build complete outfits with 6 categories: top, bottom, shoes, necklace, earrings, and bracelets. Use build_outfit for full looks. IMPORTANT: When build_outfit is confirmed and executed, it searches Amazon and displays NUMBERED items in EACH category in the wardrobe tab. These items have numbers (1, 2, 3...) just like smart_search results. The user can then say "top number 3" or "necklace number 2" to select items. Use select_outfit_items with category and number to select them. You do NOT need to run smart_search again — the outfit builder already did the search.
+3. **Outfit Builder** — Build complete outfits with 6 categories: top, bottom, shoes, necklace, earrings, and bracelets. Use build_outfit for full looks. When confirmed, it searches Amazon and displays NUMBERED items in each category. The user can say "top number 3" or "necklace number 2" to select. Use select_outfit_items with category and number. The outfit builder handles all searching automatically.
 4. **Style Advice** — Give honest, encouraging fashion tips.
 5. **Save to Favorites** — Save the current try-on result to the user's favorites. Use save_favorite when they say "save this", "add to favorites", etc.
 6. **Save Video** — Save a generated animation/video. Use save_video when they say "save this video", "keep this animation", etc.
@@ -37,18 +37,21 @@ Search results and outfit builder items are numbered (1-based). When the user re
 
 OUTFIT ITEM SELECTION: select_outfit_items takes ONE category and ONE number per call. If the user says "top number 2 and necklace number 3", call select_outfit_items TWICE: first with category="top" number=2, then with category="necklace" number=3. Valid categories: top, bottom, shoes, necklace, earrings, bracelets.
 
-OUTFIT CONFIRMATION RULE: When you call build_outfit or select_outfit_items, items are NOTED but NOT executed yet. After calling, tell the user what has been noted and ask "Are you ready or do you want to add more?" When the user confirms (says "yes", "go ahead", "sí", etc.), you MUST call confirm_outfit — NEVER call smart_search or any other tool. Once build_outfit has been called, the ONLY valid next tools are: build_outfit (to add more items), select_outfit_items (to select by number), or confirm_outfit (to execute). NEVER use smart_search to search individual categories from a pending outfit. confirm_outfit will REJECT if categories are missing. You can ONLY use skip_missing=true when the user EXPLICITLY said they do NOT want those items (e.g., "no accessories", "skip that", "just those three").
+OUTFIT CONFIRMATION RULE: When you call build_outfit or select_outfit_items, items are NOTED but NOT executed yet. After calling, tell the user what has been noted and ask "Are you ready or do you want to add more?" When the user confirms (says "yes", "go ahead", "sí", etc.), you MUST call confirm_outfit. Once build_outfit has been called, the ONLY valid next tools are: build_outfit (to add more items), select_outfit_items (to select by number), or confirm_outfit (to execute). confirm_outfit will REJECT if categories are missing. You can ONLY use skip_missing=true when the user EXPLICITLY said they do NOT want those items (e.g., "no accessories", "skip that", "just those three").
+
+SEARCH RULE: Each search query should only be called ONCE. After calling smart_search, the results are loading — do NOT call it again. If the user says "it's loading", "still loading", "wait", "one moment", or anything about loading/waiting, that means results are on their way — just be patient and say something brief like "Take your time!" Do NOT interpret loading messages as a request to search again or refresh. Only search again if the user EXPLICITLY asks for a NEW different search.
 
 IMPORTANT: When calling try_on, ALWAYS include product_number if you know the item's number from search results or recommendations. This ensures the correct product is selected. The numbers are 1-based (item 1 is the first result, item 2 is the second, etc.).
 
-You can visually analyze search results and outfit items to make personalized recommendations based on the user's actual appearance. When the user asks "which one should I try?", "what do you recommend?", "what looks best on me?", or similar, use recommend_items. This analyzes their photo against the product images and returns personalized style advice. Always reference the visual analysis in your recommendations — mention specific details about why an item suits them (skin tone, body type, color harmony).
+You can visually analyze search results and outfit items to make personalized recommendations based on the user's actual appearance. When the user asks "which one should I try?", "what do you recommend?", "what looks best on me?", or similar, use recommend_items. For smart search, this ranks items best to worst. For outfit builder, this returns the best COMBINATION — one item number per category (top, bottom, shoes, necklace, earrings, bracelets) that work together as a cohesive outfit. After getting outfit recommendations, use select_outfit_items to select each recommended item by its category and number. Always reference the visual analysis in your recommendations — mention specific details about why an item suits them (skin tone, body type, color harmony).
 
 ROUTING RULE: When the user mentions TWO OR MORE distinct clothing categories in a single request (e.g., "find me a shirt and pants", "I want a top with shoes", "show me a dress and sneakers"), you MUST use build_outfit, NOT smart_search. Only use smart_search for SINGLE-category requests (e.g., "find me a red dress", "show me running shoes").
 
 CRITICAL BUILD_OUTFIT RULE:
 - NEVER call build_outfit on your own initiative. ONLY call it when the user EXPLICITLY asks for an outfit or mentions items from multiple categories.
-- NEVER call build_outfit until the user has explicitly described items from AT LEAST 2 different clothing categories (top, bottom, shoes). If they only mention ONE category (e.g., "build me an outfit with a red shirt"), do NOT call build_outfit yet — instead ASK them what they want for the other categories before calling the tool.
-- Do NOT invent, guess, or fill in items the user did not explicitly describe. Every argument you pass to build_outfit must come directly from the user's words.
+- If the user delegates the ENTIRE outfit to you (e.g., "build an outfit based on your criteria", "you choose", "surprise me", "pick something for me", "your choice"), you MUST fill ALL 6 categories (top, bottom, shoes, necklace, earrings, bracelets) with stylish choices and call build_outfit immediately. Do NOT ask about individual categories — the user trusts your judgment for the complete outfit.
+- If the user mentions specific items but not all categories (e.g., "build me an outfit with a red shirt"), ASK them what they want for the other categories before calling the tool.
+- Do NOT invent items when the user described specific ones. But when they ask YOU to choose, use your fashion expertise to pick all 6.
 - CATEGORY ACCURACY: Shoes/footwear (sneakers, heels, boots, sandals) MUST go in the "shoes" argument ONLY — NEVER in "top" or "bottom". Tops (shirts, blouses, jackets) go in "top". Bottoms (pants, skirts, shorts) go in "bottom". Never mix categories.
 
 USER PROFILE:
@@ -256,7 +259,7 @@ const TOOLS = [
   {
     name: "recommend_items",
     description:
-      "Visually analyze the current search results or outfit builder items against the user's actual photo to give personalized style recommendations. Use when the user asks 'which one should I try?', 'what do you recommend?', 'what looks best on me?', or any recommendation request. Returns ranked items with personal style reasons.",
+      "Visually analyze the current search results or outfit builder items against the user's actual photo to give personalized style recommendations. Use when the user asks 'which one should I try?', 'what do you recommend?', 'what looks best on me?', or any recommendation request. For smart search: returns items ranked best to worst. For outfit builder: returns the best combination (one item number per category) that work together as a cohesive outfit.",
     inputSchema: {
       json: JSON.stringify({
         type: "object",
@@ -401,6 +404,19 @@ async function executeTool(toolName, argsJson, socket) {
 
   switch (toolName) {
     case "smart_search": {
+      // Deduplicate: reject if same/similar query was just searched within 60 seconds
+      const now = Date.now();
+      const lastSearch = socket._lastSmartSearch || { query: "", time: 0 };
+      const queryNorm = (args.query || "").toLowerCase().trim();
+      if (queryNorm === lastSearch.query && now - lastSearch.time < 60000) {
+        console.log(`[VoiceAgent] Skipping duplicate smart_search: "${args.query}" (${now - lastSearch.time}ms ago)`);
+        return {
+          status: "already_done",
+          message: `Search results for "${args.query}" are already displayed. Do NOT search again. Tell the user to look at the results and ask which item they want to try on.`,
+        };
+      }
+      socket._lastSmartSearch = { query: queryNorm, time: now };
+
       const profile = socket._voiceUserProfile || {};
       const ack = await emitAndWaitForAck(socket, {
         action: "smart_search",
@@ -411,7 +427,7 @@ async function executeTool(toolName, argsJson, socket) {
       });
       return {
         status: "success",
-        message: `Searching for "${args.query}". Results will appear in the Smart Search panel.`,
+        message: `Search complete for "${args.query}". Results are now visible. Do NOT call smart_search again for this query. Ask the user which item they'd like to try on.`,
         acknowledged: !!ack.acknowledged,
       };
     }
@@ -542,6 +558,17 @@ async function executeTool(toolName, argsJson, socket) {
     }
 
     case "save_video": {
+      // Deduplicate: reject if save_video was just called within 60 seconds
+      const saveNow = Date.now();
+      const lastSave = socket._lastSaveVideo || 0;
+      if (saveNow - lastSave < 60000) {
+        console.log(`[VoiceAgent] Skipping duplicate save_video (${saveNow - lastSave}ms ago)`);
+        return {
+          status: "already_done",
+          message: "The video has already been saved. Do NOT save again. Tell the user the video is saved.",
+        };
+      }
+      socket._lastSaveVideo = saveNow;
       const ack = await emitAndWaitForAck(socket, { action: "save_video" });
       return {
         status: "success",
@@ -588,14 +615,20 @@ async function executeTool(toolName, argsJson, socket) {
       const searchScreenshot = socket._voiceSearchScreenshot || null;
       const userId = socket._voiceUserId || null;
       const userProfile = socket._voiceUserProfile || {};
+      const isOutfitMode = !!outfitResults;
 
       if (!userId) {
         return { status: "error", message: "User not authenticated. Cannot access photos." };
       }
 
-      const items = outfitResults
-        ? [...(outfitResults.tops || []), ...(outfitResults.bottoms || []), ...(outfitResults.shoes || []), ...(outfitResults.necklaces || []), ...(outfitResults.earrings || []), ...(outfitResults.bracelets || [])]
-        : searchResults;
+      // For outfit builder: keep items grouped by category
+      // For smart search: flat list
+      let items;
+      if (isOutfitMode) {
+        items = [...(outfitResults.tops || []), ...(outfitResults.bottoms || []), ...(outfitResults.shoes || []), ...(outfitResults.necklaces || []), ...(outfitResults.earrings || []), ...(outfitResults.bracelets || [])];
+      } else {
+        items = searchResults;
+      }
 
       if (!items || items.length === 0) {
         return { status: "error", message: "No search results or outfit items available yet. Please perform a search first." };
@@ -623,24 +656,56 @@ async function executeTool(toolName, argsJson, socket) {
           console.log(`[VoiceAgent] Using page screenshot (${screenshotBase64.length} chars) for recommendation`);
         }
 
-        // Build structured product data for ALL items (up to 20)
-        const productData = items.slice(0, 20).map((item) => ({
-          number: item.number,
-          title: item.title,
-          price: item.price || "",
-          rating: item.rating || "",
-          reviewCount: item.reviewCount || "",
-        }));
+        if (isOutfitMode) {
+          // OUTFIT MODE: recommend a combination of items (one per category)
+          const categoryData = {};
+          const categories = [
+            { key: "tops", label: "top", items: outfitResults.tops || [] },
+            { key: "bottoms", label: "bottom", items: outfitResults.bottoms || [] },
+            { key: "shoes", label: "shoes", items: outfitResults.shoes || [] },
+            { key: "necklaces", label: "necklace", items: outfitResults.necklaces || [] },
+            { key: "earrings", label: "earrings", items: outfitResults.earrings || [] },
+            { key: "bracelets", label: "bracelets", items: outfitResults.bracelets || [] },
+          ];
+          for (const cat of categories) {
+            if (cat.items.length > 0) {
+              categoryData[cat.label] = cat.items.slice(0, 10).map((item) => ({
+                number: item.number,
+                title: item.title,
+                price: item.price || "",
+              }));
+            }
+          }
 
-        console.log(`[VoiceAgent] Analyzing ${productData.length} products (screenshot: ${!!screenshotBase64}) against user photo...`);
-        const rankings = await recommendItems(userPhotoBase64, productData, userProfile, screenshotBase64);
-        console.log(`[VoiceAgent] Recommendation results:`, JSON.stringify(rankings));
+          console.log(`[VoiceAgent] Outfit recommendation: ${Object.keys(categoryData).length} categories, screenshot: ${!!screenshotBase64}`);
+          const outfitRec = await recommendItems(userPhotoBase64, null, userProfile, screenshotBase64, categoryData);
+          console.log(`[VoiceAgent] Outfit recommendation results:`, JSON.stringify(outfitRec));
 
-        return {
-          status: "success",
-          recommendations: rankings,
-          message: `Analyzed ${productData.length} items against the user's photo. Here are personalized recommendations ranked from best to worst match.`,
-        };
+          return {
+            status: "success",
+            recommendations: outfitRec,
+            message: `Analyzed outfit items across ${Object.keys(categoryData).length} categories against the user's photo. Here is the recommended combination with the best item number for each category. Use select_outfit_items to select each recommended item by its category and number.`,
+          };
+        } else {
+          // SMART SEARCH MODE: rank items best to worst
+          const productData = items.slice(0, 20).map((item) => ({
+            number: item.number,
+            title: item.title,
+            price: item.price || "",
+            rating: item.rating || "",
+            reviewCount: item.reviewCount || "",
+          }));
+
+          console.log(`[VoiceAgent] Analyzing ${productData.length} products (screenshot: ${!!screenshotBase64}) against user photo...`);
+          const rankings = await recommendItems(userPhotoBase64, productData, userProfile, screenshotBase64);
+          console.log(`[VoiceAgent] Recommendation results:`, JSON.stringify(rankings));
+
+          return {
+            status: "success",
+            recommendations: rankings,
+            message: `Analyzed ${productData.length} items against the user's photo. Here are personalized recommendations ranked from best to worst match.`,
+          };
+        }
       } catch (err) {
         console.error("[VoiceAgent] recommend_items error:", err.message);
         return { status: "error", message: `Could not analyze items: ${err.message}` };
@@ -754,7 +819,7 @@ async function executeTool(toolName, argsJson, socket) {
         if (pendingAction.args.bracelets) parts.push(`bracelets="${pendingAction.args.bracelets}"`);
         return {
           status: "success",
-          message: `Opening the Outfit Builder with: ${parts.join(", ")}. The wardrobe is now searching Amazon for each category and will display NUMBERED items (1, 2, 3...) in each category: tops, bottoms, shoes, necklaces, earrings, bracelets. Once items load, the user can say "top number 3" or "necklace number 2" etc. to select items. Use select_outfit_items with the category and number to select them. You DO NOT need to do any additional smart_search — the outfit builder already searched for all categories.`,
+          message: `Opening the Outfit Builder with: ${parts.join(", ")}. The wardrobe is searching Amazon and will display NUMBERED items in each category. Once items load, the user can say "top number 3" or "necklace number 2" to select. Use select_outfit_items with category and number. The outfit builder handles all searching — just wait for the user to pick items.`,
           acknowledged: !!ack.acknowledged,
         };
       }

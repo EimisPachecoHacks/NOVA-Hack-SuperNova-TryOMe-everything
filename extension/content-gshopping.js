@@ -84,17 +84,53 @@
     return priceSpan ? priceSpan.textContent.trim() : null;
   }
 
-  function getCardLink(card) {
-    const a = card.tagName === "A" ? card : card.querySelector("a[href]");
-    if (!a) return null;
-    const href = a.href;
-    // Google redirect URLs contain the real URL
+  // Extract the product URL from an image element by walking up to find the <a> wrapping it.
+  // On Google Shopping, product images are wrapped in <a> tags linking to the product page.
+  // This is more reliable than searching card descendants (which may include navigation links).
+  function getProductUrl(img) {
+    // Strategy 1: Walk up from the image to find the nearest <a> ancestor
+    let el = img.parentElement;
+    for (let i = 0; i < 5 && el && el !== document.body; i++) {
+      if (el.tagName === "A" && el.href) {
+        return extractRealUrl(el.href);
+      }
+      el = el.parentElement;
+    }
+    // Strategy 2: Find the card and look for <a> tags wrapping title headings
+    const card = findCardAncestor(img);
+    if (card) {
+      const titleLink = card.querySelector("h3 a[href], h4 a[href], [role='heading'] a[href]");
+      if (titleLink) return extractRealUrl(titleLink.href);
+      // Strategy 3: Find <a> tags that link to /shopping/product/ (Google product pages)
+      const productPageLink = Array.from(card.querySelectorAll("a[href]")).find(a =>
+        a.href.includes("/shopping/product/") || a.href.includes("/url?")
+      );
+      if (productPageLink) return extractRealUrl(productPageLink.href);
+    }
+    return null;
+  }
+
+  // Unwrap Google redirect URLs to get the real retailer URL
+  function extractRealUrl(href) {
+    if (!href) return null;
+    // Skip known Google internal pages
+    if (href.includes("support.google.com") || href.includes("policies.google.com")) return null;
     try {
       const u = new URL(href);
       const realUrl = u.searchParams.get("url") || u.searchParams.get("q");
-      if (realUrl && realUrl.startsWith("http")) return realUrl;
+      if (realUrl && realUrl.startsWith("http") && !realUrl.includes("support.google.com")) return realUrl;
     } catch (_) {}
     return href;
+  }
+
+  function getCardLink(card) {
+    // Legacy fallback — prefer getProductUrl(img) instead
+    const allLinks = card.tagName === "A" ? [card] : Array.from(card.querySelectorAll("a[href]"));
+    for (const a of allLinks) {
+      const url = extractRealUrl(a.href);
+      if (url) return url;
+    }
+    return null;
   }
 
   function getCardProductId(card) {
@@ -144,9 +180,10 @@
     const imgUrl = img.getAttribute("data-src") || img.src;
     const card = findCardAncestor(img);
     const title = card ? getCardTitle(card) : (img.alt || "");
-    const productUrl = card ? getCardLink(card) : null;
+    const productUrl = getProductUrl(img) || (card ? getCardLink(card) : null) || window.location.href;
     const productId = card ? getCardProductId(card) : "gshop_" + hashCode(imgUrl);
     const price = card ? getCardPrice(card) : null;
+    console.log("[NovaTryOnMe] GShop card data:", { title, productUrl, productId, price });
 
     if (!imgUrl) return;
 

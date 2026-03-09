@@ -109,6 +109,7 @@ async function saveVideoRecord(userId, videoData) {
     asin: videoData.asin || "",
     productTitle: videoData.productTitle || "",
     productImage: videoData.productImage || "",
+    outfitItems: videoData.outfitItems || [],
     savedAt: new Date().toISOString(),
   };
   await docClient.send(new PutCommand({

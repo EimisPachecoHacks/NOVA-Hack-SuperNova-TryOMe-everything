@@ -69,6 +69,7 @@ async function connectSocket() {
     if (data.role === "ASSISTANT" || data.role === "assistant") {
       appendTranscript("assistant", data.text);
     } else if (data.role === "USER" || data.role === "user") {
+      flushPlayback(); // Stop Stella's audio when user starts speaking (barge-in)
       appendTranscript("user", data.text);
     }
   });

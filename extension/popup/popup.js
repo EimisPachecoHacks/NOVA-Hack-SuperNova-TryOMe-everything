@@ -841,27 +841,63 @@ async function showVideosView() {
       const date = video.savedAt ? new Date(video.savedAt).toLocaleDateString() : '';
       const title = video.productTitle || video.asin || 'Try-on video';
       const shortTitle = title.split(' ').slice(0, 5).join(' ');
+      const hasOutfitItems = video.outfitItems && video.outfitItems.length > 0;
+
+      // Build outfit item rows (like favorites outfit card)
+      let outfitItemsHtml = '';
+      if (hasOutfitItems) {
+        outfitItemsHtml = '<div class="video-outfit-items">' +
+          video.outfitItems.map(i => {
+            const itemTitle = (i.productTitle || 'Item').split(' ').slice(0, 4).join(' ');
+            return `<div class="fav-outfit-row" data-asin="${i.asin || ''}" data-url="${i.productUrl || ''}">
+              <img class="fav-outfit-thumb" src="${i.productImage || ''}" alt="${itemTitle}" title="${i.productTitle || ''}">
+              <a class="fav-outfit-link" href="#">${itemTitle}</a>
+            </div>`;
+          }).join('') +
+          '</div>';
+      }
 
       card.innerHTML = `
         <div class="video-card-player">
           ${video.videoUrl ? `<video class="video-card-video" controls preload="metadata"><source src="${video.videoUrl}" type="video/mp4"></video>` : '<div class="video-card-placeholder">Video unavailable</div>'}
         </div>
         <div class="video-card-body">
-          <div class="video-card-info">
-            ${video.productImage ? `<img class="video-card-product-img" src="${video.productImage}" alt="Product">` : ''}
-            <div>
-              <div class="video-card-title">${shortTitle}</div>
-              <div class="video-card-meta">${date}</div>
+          ${hasOutfitItems ? `
+            <span class="fav-card-retailer fav-retailer-amazon">Amazon</span>
+            <div class="video-card-title">Outfit (${video.outfitItems.length} items)</div>
+            ${outfitItemsHtml}
+            <div class="video-card-meta">${date}</div>
+          ` : `
+            <div class="video-card-info">
+              ${video.productImage ? `<img class="video-card-product-img" src="${video.productImage}" alt="Product">` : ''}
+              <div>
+                <div class="video-card-title">${shortTitle}</div>
+                <div class="video-card-meta">${date}</div>
+              </div>
             </div>
-          </div>
-          <div class="video-card-actions">
-            ${video.asin ? `<a class="video-card-link" href="#" data-asin="${video.asin}">View Product</a>` : ''}
+            <div class="video-card-actions">
+              ${video.asin ? `<a class="video-card-link" href="#" data-asin="${video.asin}">View Product</a>` : ''}
+            </div>
+          `}
+          <div class="video-card-actions-bottom">
             <button class="video-card-delete" title="Remove video" data-video-id="${video.videoId}">&times;</button>
           </div>
         </div>
       `;
 
-      // Click product link
+      // Click outfit item rows → open product page
+      if (hasOutfitItems) {
+        card.querySelectorAll('.fav-outfit-row').forEach(el => {
+          el.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const url = el.dataset.url || (el.dataset.asin ? `https://www.amazon.com/dp/${el.dataset.asin}` : null);
+            if (url) chrome.tabs.create({ url });
+          });
+        });
+      }
+
+      // Click product link (solo video fallback)
       const productLink = card.querySelector('.video-card-link');
       if (productLink) {
         productLink.addEventListener('click', (e) => {
@@ -1926,6 +1962,7 @@ function initStella() {
           appendTranscript('system', 'Saving to favorites...');
           break;
         case 'save_video':
+          // Same pattern as save_favorite: let wardrobe handle it directly (it has all the data)
           chrome.runtime.sendMessage({ type: 'VOICE_SAVE_VIDEO' });
           appendTranscript('system', 'Saving video...');
           break;

@@ -738,6 +738,9 @@ async function handleSaveFavorite() {
     if (selectedTop) outfitItems.push({ item: selectedTop, category: "top", garmentClass: "UPPER_BODY" });
     if (selectedBottom) outfitItems.push({ item: selectedBottom, category: "bottom", garmentClass: "LOWER_BODY" });
     if (selectedShoes) outfitItems.push({ item: selectedShoes, category: "shoes", garmentClass: "SHOES" });
+    if (selectedNecklace) outfitItems.push({ item: selectedNecklace, category: "necklace", garmentClass: "NECKLACE" });
+    if (selectedEarrings) outfitItems.push({ item: selectedEarrings, category: "earrings", garmentClass: "EARRINGS" });
+    if (selectedBracelet) outfitItems.push({ item: selectedBracelet, category: "bracelets", garmentClass: "BRACELET" });
 
     // Shared outfitId links all items together
     const outfitId = "outfit_" + Date.now();
@@ -747,8 +750,7 @@ async function handleSaveFavorite() {
     // Save each item (all share the same try-on result image and outfitId)
     for (const { item, category, garmentClass } of outfitItems) {
       const asinMatch = (item.product_url || "").match(/\/dp\/([A-Z0-9]{10})/);
-      const productId = asinMatch ? asinMatch[1] : item.productId || "";
-      if (!productId) continue;
+      const productId = asinMatch ? asinMatch[1] : (item.productId || ("outfit_item_" + Date.now() + "_" + category));
 
       console.log(`[Wardrobe]   saving ${category}: productId=${productId}`);
 
@@ -903,6 +905,54 @@ function resizeImageBase64(base64, minDim = 320, maxDim = 4096) {
 }
 
 // ---------------------------------------------------------------------------
+// Save Video — mirrors handleSaveFavorite, saves directly via API_CALL
+// ---------------------------------------------------------------------------
+async function handleSaveVideo() {
+  if (!lastVideoSrc) return;
+
+  // Collect all outfit items (same as handleSaveFavorite)
+  const allOutfitItems = [selectedTop, selectedBottom, selectedShoes, selectedNecklace, selectedEarrings, selectedBracelet].filter(Boolean);
+  const outfitItems = allOutfitItems.map(i => {
+    const asinMatch = (i.product_url || "").match(/\/dp\/([A-Z0-9]{10})/);
+    return {
+      asin: asinMatch ? asinMatch[1] : (i.productId || ""),
+      productTitle: i.title || "",
+      productImage: i.image_url || "",
+      productUrl: i.product_url || "",
+    };
+  });
+
+  let videoBase64 = null;
+  let videoUrl = null;
+  if (lastVideoSrc.startsWith("data:")) {
+    videoBase64 = lastVideoSrc.split(",")[1];
+  } else {
+    videoUrl = lastVideoSrc;
+  }
+
+  const productTitle = allOutfitItems.map(i => (i.title || "").split(" ").slice(0, 3).join(" ")).join(" + ");
+
+  console.log(`[Wardrobe] SAVE VIDEO — ${outfitItems.length} outfitItems, title: "${productTitle.substring(0, 50)}"`);
+
+  try {
+    await sendMessage({
+      type: "API_CALL",
+      method: "POST",
+      endpoint: "/api/video/save",
+      data: {
+        videoBase64,
+        videoUrl,
+        productTitle,
+        outfitItems,
+      },
+    });
+    console.log("[Wardrobe] Video saved successfully");
+  } catch (err) {
+    console.error("[Wardrobe] Save video failed:", err);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Animate — generate video from try-on result
 // ---------------------------------------------------------------------------
 async function handleAnimate() {
@@ -971,14 +1021,27 @@ async function handleAnimate() {
     btn.disabled = false;
     lastVideoSrc = videoSrc;
 
+    // Collect all outfit items for video metadata
+    const allOutfitItems = [selectedTop, selectedBottom, selectedShoes, selectedNecklace, selectedEarrings, selectedBracelet].filter(Boolean);
+    const outfitItemsForVideo = allOutfitItems.map(i => {
+      const asinMatch = (i.product_url || "").match(/\/dp\/([A-Z0-9]{10})/);
+      return {
+        asin: asinMatch ? asinMatch[1] : (i.productId || ""),
+        productTitle: i.title || "",
+        productImage: i.image_url || "",
+        productUrl: i.product_url || "",
+      };
+    });
+
     // Store last video context for voice "save video" command
     chrome.storage.local.set({
       lastVideo: {
         videoUrl: videoSrc.startsWith("data:") ? null : videoSrc,
         videoBase64: videoSrc.startsWith("data:") ? videoSrc.split(",")[1] : null,
         productId: "",
-        productTitle: [selectedTop, selectedBottom, selectedShoes].filter(Boolean).map(i => (i.title || "").split(" ").slice(0, 3).join(" ")).join(" + "),
+        productTitle: allOutfitItems.map(i => (i.title || "").split(" ").slice(0, 3).join(" ")).join(" + "),
         productImage: "",
+        outfitItems: outfitItemsForVideo,
         timestamp: Date.now(),
       }
     });
@@ -1006,7 +1069,8 @@ async function handleAnimate() {
           data: {
             videoBase64,
             videoUrl: videoUrlForSave,
-            productTitle: [selectedTop, selectedBottom, selectedShoes].filter(Boolean).map(i => (i.title || "").split(" ").slice(0, 3).join(" ")).join(" + "),
+            productTitle: allOutfitItems.map(i => (i.title || "").split(" ").slice(0, 3).join(" ")).join(" + "),
+            outfitItems: outfitItemsForVideo,
           },
         });
         newBtn.innerHTML = "&#9989; Saved!";
@@ -1118,14 +1182,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
   }
 
-  // Voice-triggered save video
+  // Voice-triggered save video (same pattern as VOICE_SAVE_FAVORITE — wardrobe has all the data)
   if (message.type === "VOICE_SAVE_VIDEO") {
     console.log("[Wardrobe] Voice save video triggered");
-    const videoEl = document.querySelector("#videoContainer video");
-    if (videoEl) {
-      // Video exists in the mirror, trigger save via the save video button logic
-      const saveBtn = document.querySelector(".vw-btn-save-video");
-      if (saveBtn) saveBtn.click();
+    if (lastVideoSrc) {
+      handleSaveVideo();
       sendResponse({ status: "ok", action: "save_video" });
     } else {
       sendResponse({ status: "error", error: "No video to save" });

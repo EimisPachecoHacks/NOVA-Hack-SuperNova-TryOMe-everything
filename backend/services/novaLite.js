@@ -249,7 +249,7 @@ IMPORTANT: Return ONLY valid JSON, no additional text.`;
  * @param {string|null} screenshotBase64 - screenshot of the results page (optional)
  * @returns {Array} [{ number, score, reason }]
  */
-async function recommendItems(userPhotoBase64, productData, userProfile, screenshotBase64 = null) {
+async function recommendItems(userPhotoBase64, productData, userProfile, screenshotBase64 = null, categoryData = null) {
   const sex = userProfile?.sex || "unknown";
   const size = userProfile?.clothesSize || "unknown";
 
@@ -272,16 +272,57 @@ async function recommendItems(userPhotoBase64, productData, userProfile, screens
         source: { bytes: Buffer.from(screenshotBase64, "base64") },
       },
     });
-    contentBlocks.push({ text: "IMAGE 2: This is a screenshot of the search results page showing all the products the user is browsing. Each product has a numbered badge, image, title, and price visible. Use this to visually assess the colors, styles, and patterns of each product.\n" });
+    contentBlocks.push({ text: "IMAGE 2: This is a screenshot of the outfit builder or search results page showing products. Each product has a numbered badge, image, title, and price visible. Use this to visually assess the colors, styles, and patterns of each product.\n" });
   }
 
-  // 3. Structured product data for ALL items (up to 20)
-  const productList = productData.map((p) =>
-    `#${p.number}: "${p.title}" — ${p.price || "no price"}${p.rating ? ` — ${p.rating} stars` : ""}${p.reviewCount ? ` (${p.reviewCount} reviews)` : ""}`
-  ).join("\n");
+  // OUTFIT COMBINATION MODE vs SMART SEARCH RANKING MODE
+  if (categoryData) {
+    // Build category-by-category product listing
+    const categoryLines = [];
+    for (const [cat, items] of Object.entries(categoryData)) {
+      const itemLines = items.map((p) =>
+        `  #${p.number}: "${p.title}" — ${p.price || "no price"}`
+      ).join("\n");
+      categoryLines.push(`${cat.toUpperCase()}:\n${itemLines}`);
+    }
 
-  contentBlocks.push({
-    text: `Here are ALL ${productData.length} products to analyze:
+    contentBlocks.push({
+      text: `This is an OUTFIT BUILDER with items in ${Object.keys(categoryData).length} categories. Pick the BEST item from EACH category to create a cohesive outfit:
+
+${categoryLines.join("\n\n")}
+
+Based on the user's photo (IMAGE 1)${screenshotBase64 ? " and the outfit builder screenshot (IMAGE 2)" : ""}, recommend the BEST COMBINATION — one item per category that work together as a complete outfit. Consider:
+- How the items complement the user's body type, skin tone, and coloring
+- Color coordination across all pieces
+- Style coherence (all pieces should match in formality and aesthetic)
+
+The user is ${sex}, size ${size}.
+
+Return a JSON object with the best item number for each category, plus a reason for each pick and an overall outfit description:
+{
+  "top": { "number": 2, "reason": "The V-neck silhouette flatters your frame and the navy complements your skin tone" },
+  "bottom": { "number": 1, "reason": "High-waisted cut balances your proportions, and the cream pairs beautifully with the navy top" },
+  "shoes": { "number": 3, "reason": "Nude heels elongate your legs and keep the focus on the outfit" },
+  "necklace": { "number": 1, "reason": "Delicate gold chain adds warmth without competing with the top's neckline" },
+  "earrings": { "number": 2, "reason": "Small hoops complement the necklace and keep the look elegant" },
+  "bracelets": { "number": 1, "reason": "Thin gold bangle ties in with the necklace for a coordinated accessories set" },
+  "overall": "A polished yet approachable look — the navy and cream palette brings out your warm undertones, and the coordinated gold accessories add just the right amount of sparkle"
+}
+
+Only include categories that have items listed above. Reasons should be personal to THIS user's appearance. Be like an honest stylist friend.
+
+IMPORTANT: Return ONLY valid JSON object, no additional text.`,
+    });
+
+    console.log(`[novaLite] recommendItems OUTFIT: ${Object.keys(categoryData).length} categories, screenshot: ${!!screenshotBase64}, user: ${sex} size ${size}`);
+  } else {
+    // SMART SEARCH MODE: rank items best to worst (original behavior)
+    const productList = productData.map((p) =>
+      `#${p.number}: "${p.title}" — ${p.price || "no price"}${p.rating ? ` — ${p.rating} stars` : ""}${p.reviewCount ? ` (${p.reviewCount} reviews)` : ""}`
+    ).join("\n");
+
+    contentBlocks.push({
+      text: `Here are ALL ${productData.length} products to analyze:
 
 ${productList}
 
@@ -299,9 +340,10 @@ Return a JSON array sorted from BEST to WORST match. Include ALL ${productData.l
 Score 1-10. Reasons should be personal and specific to THIS user's appearance — reference their body type, skin tone, coloring. Be like an honest stylist friend. Also factor in ratings and review counts as a quality signal.
 
 IMPORTANT: Return ONLY valid JSON array, no additional text.`,
-  });
+    });
 
-  console.log(`[novaLite] recommendItems: ${productData.length} products, screenshot: ${!!screenshotBase64}, user: ${sex} size ${size}`);
+    console.log(`[novaLite] recommendItems: ${productData.length} products, screenshot: ${!!screenshotBase64}, user: ${sex} size ${size}`);
+  }
 
   const response = await bedrockClient.send(
     new ConverseCommand({
@@ -325,10 +367,14 @@ IMPORTANT: Return ONLY valid JSON array, no additional text.`,
   try {
     return JSON.parse(jsonStr);
   } catch (e) {
+    const objMatch = responseText.match(/\{[\s\S]*\}/);
     const arrayMatch = responseText.match(/\[[\s\S]*\]/);
+    if (categoryData && objMatch) return JSON.parse(objMatch[0]);
     if (arrayMatch) return JSON.parse(arrayMatch[0]);
     console.error("[novaLite] recommendItems parse error:", responseText);
-    return [{ number: 1, score: 5, reason: "Could not analyze images" }];
+    return categoryData
+      ? { overall: "Could not analyze outfit items" }
+      : [{ number: 1, score: 5, reason: "Could not analyze images" }];
   }
 }
 

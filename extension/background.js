@@ -478,20 +478,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
 
         case "VOICE_SAVE_VIDEO": {
-          // Read last video from storage and save via API
-          const lastVideo = (await chrome.storage.local.get("lastVideo")).lastVideo;
-          if (!lastVideo) {
-            sendResponse({ error: "No video to save" });
-            break;
-          }
-          const saveResult = await apiPost("/api/video/save", {
-            videoUrl: lastVideo.videoUrl,
-            videoBase64: lastVideo.videoBase64,
-            asin: lastVideo.productId,
-            productTitle: lastVideo.productTitle,
-            productImage: lastVideo.productImage,
-          });
-          sendResponse({ data: saveResult });
+          // Handled by wardrobe.js directly (has live outfit data) — no-op here to prevent duplicates
+          console.log("[background] VOICE_SAVE_VIDEO — skipping, wardrobe handles this");
+          sendResponse({ data: { skipped: true } });
           break;
         }
 

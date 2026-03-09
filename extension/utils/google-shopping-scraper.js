@@ -124,7 +124,34 @@ function scrapeProductData() {
     price = priceEl.textContent.trim();
   }
 
-  return { imageUrl, title, breadcrumbs, productId, price, retailer: "google_shopping", productUrl: window.location.href };
+  // Try to find the actual retailer product URL from the page
+  // Google Shopping product pages have links to the retailer's site
+  let productUrl = window.location.href;
+  const productLinks = Array.from(document.querySelectorAll("a[href]"));
+  const retailerLink = productLinks.find(a => {
+    const href = a.href || "";
+    // Look for links that go to external retailers (not google.com)
+    if (href.includes("google.com") || href.includes("gstatic.com")) return false;
+    // Check for Google redirect URLs that contain a real product URL
+    try {
+      const u = new URL(href);
+      const realUrl = u.searchParams.get("url") || u.searchParams.get("q");
+      if (realUrl && realUrl.startsWith("http") && !realUrl.includes("google.com")) return true;
+    } catch (_) {}
+    // Direct external links
+    return href.startsWith("http") && !href.includes("google.com") && !href.includes("gstatic.com");
+  });
+  if (retailerLink) {
+    try {
+      const u = new URL(retailerLink.href);
+      const realUrl = u.searchParams.get("url") || u.searchParams.get("q");
+      productUrl = (realUrl && realUrl.startsWith("http")) ? realUrl : retailerLink.href;
+    } catch (_) {
+      productUrl = retailerLink.href;
+    }
+  }
+
+  return { imageUrl, title, breadcrumbs, productId, price, retailer: "google_shopping", productUrl };
 }
 
 /**

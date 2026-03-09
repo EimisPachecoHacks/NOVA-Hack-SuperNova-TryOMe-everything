@@ -70,7 +70,9 @@ router.get("/:jobId", async (req, res, next) => {
 // POST /api/video/save — Save a video to S3 and store metadata in DynamoDB
 router.post("/save", requireAuth, async (req, res, next) => {
   try {
-    const { videoUrl, videoBase64, asin, productTitle, productImage } = req.body;
+    const { videoUrl, videoBase64, asin, productTitle, productImage, outfitItems } = req.body;
+
+    console.log(`[video] SAVE received — productTitle: "${(productTitle || "").substring(0, 50)}", outfitItems: ${Array.isArray(outfitItems) ? outfitItems.length + " items" : typeof outfitItems + " = " + JSON.stringify(outfitItems)}`);
 
     if (!videoUrl && !videoBase64) {
       return res.status(400).json({ error: "videoUrl or videoBase64 is required" });
@@ -105,6 +107,7 @@ router.post("/save", requireAuth, async (req, res, next) => {
       asin: asin || "",
       productTitle: productTitle || "",
       productImage: productImage || "",
+      outfitItems: outfitItems || [],
     });
 
     console.log(`[video] Video saved to S3 + DynamoDB: ${key}`);
