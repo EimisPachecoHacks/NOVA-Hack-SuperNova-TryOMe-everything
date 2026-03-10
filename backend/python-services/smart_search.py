@@ -158,12 +158,27 @@ def smart_search(query: str, headless: bool = True) -> list[dict]:
                                     price = priceSpan.textContent.trim();
                                 }
 
-                                // Rating: not shown in grid view, but try anyway
+                                // Rating: try multiple selectors
                                 let rating = '';
-                                const ratingEl = item.querySelector('[aria-label*="out of 5"]');
+                                const ratingEl = item.querySelector('[aria-label*="out of 5"]')
+                                    || item.querySelector('i[class*="a-star"] + span.a-size-base')
+                                    || item.querySelector('.a-icon-star-small');
                                 if (ratingEl) {
-                                    const m = ratingEl.getAttribute('aria-label').match(/([\d.]+)/);
-                                    if (m) rating = m[1];
+                                    const ariaLabel = ratingEl.getAttribute('aria-label') || '';
+                                    const cls = ratingEl.className || '';
+                                    const m = ariaLabel.match(/([\d.]+)/) || cls.match(/a-star-(?:small-)?([\d]-[\d])/);
+                                    if (m) {
+                                        rating = m[1].replace('-', '.');
+                                    }
+                                }
+                                // Fallback: look for rating text anywhere in the item
+                                if (!rating) {
+                                    const allSpans = item.querySelectorAll('span[aria-label]');
+                                    for (const sp of allSpans) {
+                                        const al = sp.getAttribute('aria-label') || '';
+                                        const rm = al.match(/([\d.]+)\s*out\s*of\s*5/);
+                                        if (rm) { rating = rm[1]; break; }
+                                    }
                                 }
 
                                 // Popularity (e.g., "1K+ bought in past month")

@@ -450,11 +450,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
 
         case "VOICE_TRY_ON": {
-          // Navigate to the product URL if available, otherwise notify
-          if (message.productUrl) {
-            chrome.tabs.create({ url: message.productUrl });
-          }
-          sendResponse({ data: { opened: !!message.productUrl } });
+          // try_on is now routed through select_search_item — never open raw URLs
+          console.log(`[background] VOICE_TRY_ON ignored — try_on uses select_search_item path`);
+          sendResponse({ data: { opened: false } });
           break;
         }
 
@@ -619,7 +617,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           sendResponse({ error: `Unknown message type: ${message.type}` });
       }
     } catch (err) {
-      console.error("[NovaTryOnMe background] Error:", err);
+      console.error(`%c[background] ${message.type} FAILED %c ${err.message}`, "background:#f44336;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px;", "color:#f44336;font-weight:bold;");
       sendResponse({ error: err.message });
     }
   })();

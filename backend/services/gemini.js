@@ -148,6 +148,8 @@ async function virtualTryOn(sourceImageBase64, referenceImageBase64, garmentClas
 
   const MAX_ATTEMPTS = 2;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const geminiCallStart = Date.now();
+    console.log(`\x1b[34m  ⏱ GEMINI API call attempt ${attempt} starting...\x1b[0m`);
     const response = await client.models.generateContent({
       model: modelId,
       contents: [
@@ -178,11 +180,13 @@ async function virtualTryOn(sourceImageBase64, referenceImageBase64, garmentClas
       },
     });
 
+    const geminiCallTime = ((Date.now() - geminiCallStart) / 1000).toFixed(1);
+
     // Extract the image from the response
     const candidates = response.candidates || [];
     if (!candidates.length) {
       if (attempt < MAX_ATTEMPTS) {
-        console.log(`\x1b[33m  ⟳ GEMINI attempt ${attempt} returned no candidates — retrying...\x1b[0m`);
+        console.log(`\x1b[33m  ⟳ GEMINI attempt ${attempt} returned no candidates (${geminiCallTime}s) — retrying...\x1b[0m`);
         continue;
       }
       throw new Error("No response from Gemini");
@@ -199,7 +203,7 @@ async function virtualTryOn(sourceImageBase64, referenceImageBase64, garmentClas
 
     if (!resultData) {
       if (attempt < MAX_ATTEMPTS) {
-        console.log(`\x1b[33m  ⟳ GEMINI attempt ${attempt} returned no image — retrying...\x1b[0m`);
+        console.log(`\x1b[33m  ⟳ GEMINI attempt ${attempt} returned no image (${geminiCallTime}s) — retrying...\x1b[0m`);
         continue;
       }
       throw new Error("No image in Gemini response");
@@ -208,11 +212,11 @@ async function virtualTryOn(sourceImageBase64, referenceImageBase64, garmentClas
     // Validate: check if result is suspiciously similar in size to source (garment not applied)
     const sizeDiff = Math.abs(resultData.length - sourceImageBase64.length) / sourceImageBase64.length;
     if (sizeDiff < 0.05 && attempt < MAX_ATTEMPTS) {
-      console.log(`\x1b[33m  ⟳ GEMINI attempt ${attempt} result too similar to source (${(sizeDiff * 100).toFixed(1)}% size diff) — retrying with stronger prompt...\x1b[0m`);
+      console.log(`\x1b[33m  ⟳ GEMINI attempt ${attempt} result too similar to source (${(sizeDiff * 100).toFixed(1)}% size diff, ${geminiCallTime}s) — retrying with stronger prompt...\x1b[0m`);
       continue;
     }
 
-    console.log(`\x1b[32m  ✓ GEMINI RESPONSE RECEIVED\x1b[0m (attempt ${attempt}) — image: ${resultData.length} chars, sizeDiff: ${(sizeDiff * 100).toFixed(1)}%`);
+    console.log(`\x1b[32m  ✓ GEMINI RESPONSE RECEIVED\x1b[0m (attempt ${attempt}, \x1b[1m${geminiCallTime}s\x1b[0m) — image: ${resultData.length} chars, sizeDiff: ${(sizeDiff * 100).toFixed(1)}%`);
     return resultData;
   }
 

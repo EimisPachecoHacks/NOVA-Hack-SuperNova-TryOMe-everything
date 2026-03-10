@@ -124,7 +124,9 @@ async function startSearch(q) {
     const elapsedSeconds = stopTimer();
 
     if (!result || result.error) {
-      showError(result?.error || "Search failed. Please try again.");
+      const errMsg = result?.error || "Search failed. Please try again.";
+      console.error("[SmartSearch] API error:", errMsg);
+      showError(errMsg);
       return;
     }
 
@@ -399,6 +401,8 @@ async function handleTryOn(index) {
     btn.textContent = "\u23F3 Processing...";
   }
 
+  const tryOnStartTs = Date.now();
+  console.log(`%c[SmartSearch] TRY-ON STARTED %c Product: "${product.title}" (#${index + 1})`, "background:#FF9900;color:#000;font-weight:bold;padding:2px 6px;border-radius:3px;font-size:13px;", "color:#FF9900;font-weight:bold;font-size:13px;");
   try {
     // Step 1: Get user's body photo — same as content.js
     updateTryOnStatus(1, "Loading your photo...");
@@ -413,6 +417,7 @@ async function handleTryOn(index) {
       );
       return;
     }
+    console.log(`[SmartSearch] Step 1 done — photo loaded (${((Date.now() - tryOnStartTs) / 1000).toFixed(1)}s)`);
 
     showTryOnModal();
     startTryOnTimer();
@@ -427,6 +432,7 @@ async function handleTryOn(index) {
     if (!garmentBase64) {
       throw new Error("Failed to fetch product image");
     }
+    console.log(`[SmartSearch] Step 2 done — garment fetched (${garmentBase64.length} chars, ${((Date.now() - tryOnStartTs) / 1000).toFixed(1)}s)`);
 
     // Step 3: Analyze product — same as content.js ApiClient.analyzeProduct()
     updateTryOnStatus(3, "Analyzing product...");
@@ -436,14 +442,14 @@ async function handleTryOn(index) {
         ApiClient.analyzeProduct(garmentBase64, product.title || "", ""),
         15000
       );
-      console.log("[SmartSearch] Product analysis:", JSON.stringify(analysisResult));
+      console.log(`[SmartSearch] Step 3 done — analysis: ${JSON.stringify(analysisResult)} (${((Date.now() - tryOnStartTs) / 1000).toFixed(1)}s)`);
     } catch (err) {
-      console.warn("[SmartSearch] Product analysis failed, proceeding without garmentClass:", err.message);
+      console.warn(`[SmartSearch] Step 3 FAILED — proceeding without garmentClass: ${err.message} (${((Date.now() - tryOnStartTs) / 1000).toFixed(1)}s)`);
     }
 
     // Step 4: Call try-on pipeline — identical to content.js ApiClient.tryOn()
     updateTryOnStatus(4, "AI pipeline running (5 steps)...");
-    console.log(`[SmartSearch] Try-on params — poseIdx: ${currentPoseIndex}, framing: ${currentFraming}, garmentClass: ${analysisResult ? analysisResult.garmentClass : 'null'}`);
+    console.log(`[SmartSearch] Step 4 starting — backend pipeline. poseIdx: ${currentPoseIndex}, framing: ${currentFraming}, garmentClass: ${analysisResult ? analysisResult.garmentClass : 'null'} (${((Date.now() - tryOnStartTs) / 1000).toFixed(1)}s)`);
 
     const response = await withTimeout(
       ApiClient.tryOn(
@@ -465,8 +471,10 @@ async function handleTryOn(index) {
     logDebugSteps(debugInfo);
 
     stopTryOnTimer();
+    const tryOnElapsed = ((Date.now() - tryOnStartTs) / 1000).toFixed(1);
 
     if (resultImage) {
+      console.log(`%c[SmartSearch] TRY-ON SUCCESS %c "${product.title}" — ${tryOnElapsed}s total, result: ${resultImage.length} chars`, "background:#4CAF50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px;font-size:13px;", "color:#4CAF50;font-weight:bold;font-size:13px;");
       // Store debug images for side panel — same as content.js
       if (debugInfo) {
         let debugBodyPhoto = photos.bodyPhoto;
@@ -508,12 +516,21 @@ async function handleTryOn(index) {
           timestamp: Date.now(),
         }
       });
+
+      // Notify voice agent that try-on is complete and visible
+      chrome.runtime.sendMessage({
+        type: "TRYON_COMPLETE",
+        productTitle: product.title || "",
+        success: true,
+      });
     } else {
       throw new Error(response?.error || "Try-on failed — no result image returned");
     }
   } catch (err) {
     stopTryOnTimer();
-    console.error(`%c ✗ TRY-ON FAILED %c ${err.message}`, "background:#f44336;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px;", "color:#f44336;font-weight:bold;");
+    const tryOnElapsed = ((Date.now() - tryOnStartTs) / 1000).toFixed(1);
+    console.error(`%c[SmartSearch] TRY-ON FAILED %c "${product.title}" — ${tryOnElapsed}s — ${err.message}`, "background:#f44336;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px;font-size:13px;", "color:#f44336;font-weight:bold;font-size:13px;");
+    console.error("[SmartSearch] Full error:", err);
     closeTryOnModal();
     alert("Try-on failed: " + err.message);
   } finally {
@@ -623,11 +640,7 @@ function showTryOnResult(base64Image, product) {
 // Animate — generate video from try-on result
 // ---------------------------------------------------------------------------
 async function handleAnimateResult(body, base64Image, btn, product) {
-  console.log("[SmartSearch] handleAnimateResult CALLED");
-  console.log("[SmartSearch]   body:", !!body);
-  console.log("[SmartSearch]   base64Image length:", base64Image?.length || 0);
-  console.log("[SmartSearch]   btn:", !!btn);
-  console.log("[SmartSearch]   product:", product?.title || "none");
+  console.log(`%c[SmartSearch] ANIMATE STARTED %c "${product?.title || 'unknown'}" — image: ${base64Image?.length || 0} chars`, "background:#9C27B0;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px;font-size:13px;", "color:#9C27B0;font-weight:bold;font-size:13px;");
   btn.disabled = true;
   btn.textContent = "Generating video... 0s";
 
@@ -638,13 +651,16 @@ async function handleAnimateResult(body, base64Image, btn, product) {
   }, 1000);
 
   try {
+    console.log("[SmartSearch] Requesting video generation from backend...");
     const response = await ApiClient.generateVideo(base64Image);
     const jobId = response.jobId;
     const videoProvider = response.provider || "grok";
+    console.log(`[SmartSearch] Video job created — jobId: ${jobId}, provider: ${videoProvider} (${((Date.now() - videoStart) / 1000).toFixed(1)}s)`);
 
     const videoResult = await pollVideoStatus(jobId, videoProvider);
     clearInterval(videoTimerInterval);
     const videoElapsed = ((Date.now() - videoStart) / 1000).toFixed(1);
+    console.log(`%c[SmartSearch] ANIMATE SUCCESS %c "${product?.title || 'unknown'}" — ${videoElapsed}s, videoUrl: ${videoResult.videoUrl ? 'YES' : 'NO'}, videoBase64: ${videoResult.videoBase64 ? videoResult.videoBase64.length + ' chars' : 'NO'}`, "background:#4CAF50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px;font-size:13px;", "color:#4CAF50;font-weight:bold;font-size:13px;");
 
     const videoContainer = document.createElement("div");
     videoContainer.style.cssText = "margin-top:12px; text-align:center;";
@@ -718,6 +734,9 @@ async function handleAnimateResult(body, base64Image, btn, product) {
     videoContainer.appendChild(btnRow);
     body.appendChild(videoContainer);
 
+    // Scroll the video into view
+    videoContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
     // Store last video context for voice "save video" command
     chrome.storage.local.set({
       lastVideo: {
@@ -734,7 +753,9 @@ async function handleAnimateResult(body, base64Image, btn, product) {
     btn.disabled = false;
   } catch (err) {
     clearInterval(videoTimerInterval);
-    console.error("[SmartSearch] Video generation failed:", err);
+    const videoElapsed = ((Date.now() - videoStart) / 1000).toFixed(1);
+    console.error(`%c[SmartSearch] ANIMATE FAILED %c "${product?.title || 'unknown'}" — ${videoElapsed}s — ${err.message}`, "background:#f44336;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px;font-size:13px;", "color:#f44336;font-weight:bold;font-size:13px;");
+    console.error("[SmartSearch] Full animate error:", err);
     btn.innerHTML = "&#9654; Animate";
     btn.disabled = false;
   }
@@ -743,9 +764,12 @@ async function handleAnimateResult(body, base64Image, btn, product) {
 async function pollVideoStatus(jobId, provider) {
   const MAX_POLLS = 60;
   const POLL_INTERVAL = 5000;
+  const pollStart = Date.now();
   for (let i = 0; i < MAX_POLLS; i++) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL));
     const status = await ApiClient.getVideoStatus(jobId, provider);
+    const elapsed = ((Date.now() - pollStart) / 1000).toFixed(0);
+    console.log(`[SmartSearch] Video poll #${i + 1}/${MAX_POLLS} — status: ${status.status} (${elapsed}s) jobId: ${jobId}`);
     if ((status.status === "Completed" || status.status === "COMPLETED") && (status.videoUrl || status.videoBase64)) {
       return status;
     }
@@ -753,7 +777,7 @@ async function pollVideoStatus(jobId, provider) {
       throw new Error(status.failureMessage || status.error || "Video generation failed");
     }
   }
-  throw new Error("Video generation timed out");
+  throw new Error("Video generation timed out after " + MAX_POLLS + " polls");
 }
 
 function closeTryOnModal() {

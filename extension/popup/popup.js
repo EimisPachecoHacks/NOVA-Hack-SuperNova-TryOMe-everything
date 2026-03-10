@@ -1665,11 +1665,17 @@ function initStella() {
   let audioContext = null;
   let workletNode = null;
   let sourceNode = null;
+  let micGainNode = null; // GainNode for echo ducking
   let playbackCtx = null;
   let playbackQueue = [];
   let isPlaying = false;
   let isSessionActive = false;
   let currentPlaybackSource = null;
+
+  // Echo ducking: reduce mic gain while Stella speaks to prevent echo feedback
+  // Barge-in still works because deliberate speech is much louder than echo
+  const MIC_GAIN_NORMAL = 1.0;
+  const MIC_GAIN_DUCKED = 0.05; // aggressively suppress echo, loud barge-in still gets through
 
   const micBtn = document.getElementById('stellaMicBtn');
   const stopBtn = document.getElementById('stellaStopBtn');
@@ -1791,6 +1797,10 @@ function initStella() {
       socket.emit('outfitResultsLoaded', { tops: msg.tops, bottoms: msg.bottoms, shoes: msg.shoes, necklaces: msg.necklaces, earrings: msg.earrings, bracelets: msg.bracelets });
       console.log('[Stella] Forwarded outfit results to voice session');
     }
+    if (msg.type === 'TRYON_COMPLETE' && socket && socket.connected) {
+      socket.emit('tryOnComplete', { productTitle: msg.productTitle, success: msg.success });
+      console.log('[Stella] Forwarded try-on completion to voice session:', msg.productTitle);
+    }
   });
 
   // Audio capture
@@ -1801,6 +1811,9 @@ function initStella() {
     audioContext = new AudioContext({ sampleRate: INPUT_SAMPLE_RATE });
     await audioContext.audioWorklet.addModule('audio-processor.js');
     sourceNode = audioContext.createMediaStreamSource(mediaStream);
+    // Insert a GainNode for echo ducking: mic → gain → worklet
+    micGainNode = audioContext.createGain();
+    micGainNode.gain.value = MIC_GAIN_NORMAL;
     workletNode = new AudioWorkletNode(audioContext, 'audio-capture-processor');
 
     workletNode.port.onmessage = (e) => {
@@ -1811,12 +1824,14 @@ function initStella() {
       socket.emit('audioInput', btoa(binary));
     };
 
-    sourceNode.connect(workletNode);
+    sourceNode.connect(micGainNode);
+    micGainNode.connect(workletNode);
     workletNode.connect(audioContext.destination);
   }
 
   function stopAudioCapture() {
     if (workletNode) { workletNode.disconnect(); workletNode = null; }
+    if (micGainNode) { micGainNode.disconnect(); micGainNode = null; }
     if (sourceNode) { sourceNode.disconnect(); sourceNode = null; }
     if (audioContext) { audioContext.close(); audioContext = null; }
     if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
@@ -1834,6 +1849,13 @@ function initStella() {
     if (!isPlaying) playNextChunk();
   }
 
+  function duckMic() {
+    if (micGainNode) micGainNode.gain.setTargetAtTime(MIC_GAIN_DUCKED, micGainNode.context.currentTime, 0.02);
+  }
+  function unduckMic() {
+    if (micGainNode) micGainNode.gain.setTargetAtTime(MIC_GAIN_NORMAL, micGainNode.context.currentTime, 0.05);
+  }
+
   function flushPlayback() {
     playbackQueue = [];
     if (currentPlaybackSource) {
@@ -1841,6 +1863,7 @@ function initStella() {
       currentPlaybackSource = null;
     }
     isPlaying = false;
+    unduckMic();
     if (isSessionActive) { setOrbState('listening'); setStatus('listening', 'Listening...'); }
   }
 
@@ -1848,10 +1871,12 @@ function initStella() {
     if (playbackQueue.length === 0) {
       isPlaying = false;
       currentPlaybackSource = null;
+      unduckMic();
       if (isSessionActive) { setOrbState('listening'); setStatus('listening', 'Listening...'); }
       return;
     }
     isPlaying = true;
+    duckMic();
     if (!playbackCtx) playbackCtx = new AudioContext({ sampleRate: OUTPUT_SAMPLE_RATE });
     const samples = playbackQueue.shift();
     const buffer = playbackCtx.createBuffer(1, samples.length, OUTPUT_SAMPLE_RATE);
@@ -1950,8 +1975,8 @@ function initStella() {
           appendTranscript('system', 'Searching: "' + data.query + '"');
           break;
         case 'try_on':
-          chrome.runtime.sendMessage({ type: 'VOICE_TRY_ON', productTitle: data.productTitle, productUrl: data.productUrl });
-          appendTranscript('system', 'Try-on: "' + data.productTitle + '"');
+          // try_on is routed through select_search_item by the backend — never open raw URLs
+          appendTranscript('system', 'Try-on: "' + (data.productTitle || '') + '"');
           break;
         case 'build_outfit':
           chrome.runtime.sendMessage({ type: 'VOICE_BUILD_OUTFIT', top: data.top, bottom: data.bottom, shoes: data.shoes, necklace: data.necklace, earrings: data.earrings, bracelets: data.bracelets, sex: cachedProfile?.sex || null });

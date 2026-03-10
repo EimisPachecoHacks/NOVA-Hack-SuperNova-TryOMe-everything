@@ -135,7 +135,7 @@ app.use((err, req, res, next) => {
   log.error(`${req.method} ${req.path}`, { message: err.message, stack: err.stack });
 
   const statusCode = err.statusCode || 500;
-  // Pass through meaningful API errors (rate limits, quota, etc.) but hide stack traces
+  // Pass through meaningful error context for debugging, but no stack traces
   let clientMessage = "Internal server error";
   if (statusCode < 500) {
     clientMessage = err.message || "Internal server error";
@@ -143,6 +143,13 @@ app.use((err, req, res, next) => {
     clientMessage = "AI service rate limit exceeded — please wait a moment and try again";
   } else if (err.message && err.message.includes("429")) {
     clientMessage = "Too many requests — please wait a moment and try again";
+  } else if (err.message && err.message.includes("fetch failed")) {
+    clientMessage = "Network error connecting to AI service — please try again";
+  } else if (err.message && (err.message.includes("ECONNRESET") || err.message.includes("ETIMEDOUT") || err.message.includes("ENOTFOUND"))) {
+    clientMessage = "Network error: " + err.message.split("\n")[0];
+  } else if (err.message) {
+    // Include first line of error for debugging (no stack trace)
+    clientMessage = "Server error: " + err.message.split("\n")[0].substring(0, 200);
   }
   res.status(statusCode).json({ error: clientMessage });
 });

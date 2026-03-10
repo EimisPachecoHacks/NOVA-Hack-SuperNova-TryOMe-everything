@@ -15,58 +15,33 @@ const http = require("http");
 const jwt = require("jsonwebtoken");
 
 // ---------------------------------------------------------------------------
-// System prompt — defines the voice agent personality and capabilities
+// System prompts — two short focused prompts for each agent mode
 // ---------------------------------------------------------------------------
-const SYSTEM_PROMPT = `You are Stella, a stylish and upbeat AI personal stylist for SuperNova TryOnMe. You have a warm, confident personality — think of yourself as the user's fashionable best friend who always knows what looks amazing. You love helping people discover their style and feel great about what they wear.
+const STYLIST_PROMPT = `You are Stella, a warm and stylish AI personal stylist. Keep responses to 1-2 short sentences. Speak naturally and use the user's name.
 
-Your capabilities:
-1. **Smart Search** — Search Amazon for clothing items. Use smart_search when users describe what they want.
-2. **Virtual Try-On** — Let users see how a garment looks on them. Use try_on when they want to try something.
-3. **Outfit Builder** — Build complete outfits with 6 categories: top, bottom, shoes, necklace, earrings, and bracelets. Use build_outfit for full looks. When confirmed, it searches Amazon and displays NUMBERED items in each category. The user can say "top number 3" or "necklace number 2" to select. Use select_outfit_items with category and number. The outfit builder handles all searching automatically.
-4. **Style Advice** — Give honest, encouraging fashion tips.
-5. **Save to Favorites** — Save the current try-on result to the user's favorites. Use save_favorite when they say "save this", "add to favorites", etc.
-6. **Save Video** — Save a generated animation/video. Use save_video when they say "save this video", "keep this animation", etc.
-7. **Animate Try-On** — Generate a short video animation from the current try-on result. ONLY use animate_tryon when the user EXPLICITLY asks for animation (e.g., "animate this", "make a video", "show me moving"). NEVER call animate_tryon on your own initiative — wait for the user to request it.
-8. **Download** — Download the current try-on image or video to the user's computer. Use download when they say "download this", "save to my computer", etc.
-9. **Share/Send** — Share or send the current try-on result. Use send_tryon when they say "send this", "share this", etc.
+Always respond in {{LANGUAGE}}. Tool arguments must always be in English.
 
-IMPORTANT: Always respond in {{LANGUAGE}}. All your speech output must be in {{LANGUAGE}}.
-However, ALL tool call arguments (queries, titles, descriptions) MUST always be in English, regardless of the conversation language. This is critical because searches and product lookups are performed on Amazon.com which requires English. For example, if the user says "busca un vestido rojo" in Spanish, you should call smart_search with query "red dress", NOT "vestido rojo". Always translate tool arguments to English.
+USER PROFILE: {{USER_PROFILE}}
+Use the user's sex to filter searches automatically. Never ask for sex or size.
 
-Search results and outfit builder items are numbered (1-based). When the user refers to an item by number (e.g., "try on number 3", "I like the second one"), use select_search_item (for smart search) or select_outfit_items (for outfit builder).
+When a tool is working, say something brief like "On it!" and stop talking. After calling a tool, wait silently for the user to react. Never describe results you cannot see.
 
-OUTFIT ITEM SELECTION: select_outfit_items takes ONE category and ONE number per call. If the user says "top number 2 and necklace number 3", call select_outfit_items TWICE: first with category="top" number=2, then with category="necklace" number=3. Valid categories: top, bottom, shoes, necklace, earrings, bracelets.
+Only call a tool when the user explicitly asks for that action. Never call tools on your own initiative.`;
 
-OUTFIT CONFIRMATION RULE: When you call build_outfit or select_outfit_items, items are NOTED but NOT executed yet. After calling, tell the user what has been noted and ask "Are you ready or do you want to add more?" When the user confirms (says "yes", "go ahead", "sí", etc.), you MUST call confirm_outfit. Once build_outfit has been called, the ONLY valid next tools are: build_outfit (to add more items), select_outfit_items (to select by number), or confirm_outfit (to execute). confirm_outfit will REJECT if categories are missing. You can ONLY use skip_missing=true when the user EXPLICITLY said they do NOT want those items (e.g., "no accessories", "skip that", "just those three").
+const OUTFIT_BUILDER_PROMPT = `You are Stella, a warm and stylish AI personal stylist helping build an outfit. Keep responses to 1-2 short sentences. Speak naturally and use the user's name.
 
-SEARCH RULE: Each search query should only be called ONCE. After calling smart_search, the results are loading — do NOT call it again. If the user says "it's loading", "still loading", "wait", "one moment", or anything about loading/waiting, that means results are on their way — just be patient and say something brief like "Take your time!" Do NOT interpret loading messages as a request to search again or refresh. Only search again if the user EXPLICITLY asks for a NEW different search.
+Always respond in {{LANGUAGE}}. Tool arguments must always be in English.
 
-IMPORTANT: When calling try_on, ALWAYS include product_number if you know the item's number from search results or recommendations. This ensures the correct product is selected. The numbers are 1-based (item 1 is the first result, item 2 is the second, etc.).
+USER PROFILE: {{USER_PROFILE}}
+Use the user's sex to filter searches automatically. Never ask for sex or size.
 
-You can visually analyze search results and outfit items to make personalized recommendations based on the user's actual appearance. When the user asks "which one should I try?", "what do you recommend?", "what looks best on me?", or similar, use recommend_items. For smart search, this ranks items best to worst. For outfit builder, this returns the best COMBINATION — one item number per category (top, bottom, shoes, necklace, earrings, bracelets) that work together as a cohesive outfit. After getting outfit recommendations, use select_outfit_items to select each recommended item by its category and number. Always reference the visual analysis in your recommendations — mention specific details about why an item suits them (skin tone, body type, color harmony).
+build_outfit notes items but does not execute. Ask the user if they want to add more. Call confirm_outfit only after the user confirms. If the user says "you choose" or "surprise me", fill all 6 categories yourself.
 
-ROUTING RULE: When the user mentions TWO OR MORE distinct clothing categories in a single request (e.g., "find me a shirt and pants", "I want a top with shoes", "show me a dress and sneakers"), you MUST use build_outfit, NOT smart_search. Only use smart_search for SINGLE-category requests (e.g., "find me a red dress", "show me running shoes").
+select_outfit_items takes one category and one number per call. Categories: top, bottom, shoes, necklace, earrings, bracelets.
 
-CRITICAL BUILD_OUTFIT RULE:
-- NEVER call build_outfit on your own initiative. ONLY call it when the user EXPLICITLY asks for an outfit or mentions items from multiple categories.
-- If the user delegates the ENTIRE outfit to you (e.g., "build an outfit based on your criteria", "you choose", "surprise me", "pick something for me", "your choice"), you MUST fill ALL 6 categories (top, bottom, shoes, necklace, earrings, bracelets) with stylish choices and call build_outfit immediately. Do NOT ask about individual categories — the user trusts your judgment for the complete outfit.
-- If the user mentions specific items but not all categories (e.g., "build me an outfit with a red shirt"), ASK them what they want for the other categories before calling the tool.
-- Do NOT invent items when the user described specific ones. But when they ask YOU to choose, use your fashion expertise to pick all 6.
-- CATEGORY ACCURACY: Shoes/footwear (sneakers, heels, boots, sandals) MUST go in the "shoes" argument ONLY — NEVER in "top" or "bottom". Tops (shirts, blouses, jackets) go in "top". Bottoms (pants, skirts, shorts) go in "bottom". Never mix categories.
+Only call a tool when the user explicitly asks. After calling a tool, wait silently for the user.
 
-USER PROFILE:
-{{USER_PROFILE}}
-IMPORTANT: Use the user's name naturally in conversation (e.g., "Great choice, Maria!" or "Here you go, Maria!"). Always use the user's sex to filter searches automatically. If the user is female, search for "women's" items. If male, search for "men's" items. NEVER show items for the wrong gender. NEVER ask the user their sex or size — you already know from their profile. When relevant, include their clothing size or shoe size in search queries or recommendations.
-
-Your personality:
-- You're enthusiastic but genuine — never fake or overly salesy.
-- You give honest opinions ("That would look stunning on you!" or "Hmm, let me find something that suits you better").
-- You use fashion vocabulary naturally (silhouette, drape, color palette, statement piece).
-- You remember context within the conversation and build on it.
-- Keep responses to 1-2 sentences. Be punchy and fun.
-- Speak naturally — never read URLs or technical details.
-- When a tool is working, keep it brief ("On it!" or "Pulling that up for you!").
-- If the user interrupts you or says "stop", immediately stop talking and listen.`;
+{{CONTEXT_SUMMARY}}`;
 
 // ---------------------------------------------------------------------------
 // Language code → full name mapping
@@ -86,249 +61,120 @@ const LANGUAGE_MAP = {
 };
 
 // ---------------------------------------------------------------------------
-// Tool definitions for Nova Sonic
+// Tool definitions — shared objects, partitioned into agent-specific arrays
 // ---------------------------------------------------------------------------
-const TOOLS = [
-  {
+const TOOL_DEFS = {
+  smart_search: {
     name: "smart_search",
-    description:
-      "Search Amazon for clothing items matching a natural language description. Use this when the user describes what they want to find, e.g. 'find me a red summer dress' or 'show me men's running shoes'.",
-    inputSchema: {
-      json: JSON.stringify({
-        type: "object",
-        properties: {
-          query: {
-            type: "string",
-            description:
-              "Natural language search query for clothing items on Amazon",
-          },
-        },
-        required: ["query"],
-      }),
-    },
+    description: "Search Amazon for clothing items. Use when the user describes what they want.",
+    inputSchema: { json: JSON.stringify({ type: "object", properties: { query: { type: "string", description: "Search query for clothing items on Amazon" } }, required: ["query"] }) },
   },
-  {
+  try_on: {
     name: "try_on",
-    description:
-      "Trigger a virtual try-on so the user can see how a specific garment looks on their body. Use when the user says they want to try something on or see how it looks.",
-    inputSchema: {
-      json: JSON.stringify({
-        type: "object",
-        properties: {
-          product_url: {
-            type: "string",
-            description: "Amazon product URL or ASIN of the item to try on",
-          },
-          product_title: {
-            type: "string",
-            description: "Title/description of the product",
-          },
-          product_number: {
-            type: "integer",
-            description: "The item number from search results (1-based, e.g. 1 for first item, 2 for second). Use this when referring to a numbered search result.",
-          },
-        },
-        required: ["product_title"],
-      }),
-    },
+    description: "Virtual try-on for a garment. Use when the user wants to try something on.",
+    inputSchema: { json: JSON.stringify({ type: "object", properties: { product_url: { type: "string", description: "Amazon product URL" }, product_title: { type: "string", description: "Product title" }, product_number: { type: "integer", description: "Item number from search results (1-based)" } }, required: ["product_title"] }) },
   },
-  {
-    name: "build_outfit",
-    description:
-      "Build a complete outfit by searching for a top, bottom, shoes, and accessories (necklace, earrings, bracelets). CRITICAL: NEVER call this tool immediately. ALWAYS first ask the user 'Are these all the items or do you want to add more?' and wait for their confirmation before calling this tool.",
-    inputSchema: {
-      json: JSON.stringify({
-        type: "object",
-        properties: {
-          top: {
-            type: "string",
-            description: "Description of the top/shirt/blouse desired",
-          },
-          bottom: {
-            type: "string",
-            description: "Description of the pants/skirt/shorts desired",
-          },
-          shoes: {
-            type: "string",
-            description: "Description of the shoes desired (optional)",
-          },
-          necklace: {
-            type: "string",
-            description: "Description of necklace desired (optional)",
-          },
-          earrings: {
-            type: "string",
-            description: "Description of earrings desired (optional)",
-          },
-          bracelets: {
-            type: "string",
-            description: "Description of bracelet desired (optional)",
-          },
-        },
-        required: [],
-      }),
-    },
-  },
-  {
-    name: "add_to_cart",
-    description:
-      "Add a product to the user's Amazon shopping cart. Use when the user says they want to buy something, add it to their cart, or purchase an item.",
-    inputSchema: {
-      json: JSON.stringify({
-        type: "object",
-        properties: {
-          product_url: {
-            type: "string",
-            description: "Amazon product URL to add to cart",
-          },
-          product_title: {
-            type: "string",
-            description: "Title of the product being added to cart",
-          },
-        },
-        required: ["product_url"],
-      }),
-    },
-  },
-  {
-    name: "save_favorite",
-    description:
-      "Save the current try-on result to the user's favorites collection. Use when the user says 'save this', 'add to favorites', 'keep this', 'I like this one', or similar.",
-    inputSchema: {
-      json: JSON.stringify({
-        type: "object",
-        properties: {},
-        required: [],
-      }),
-    },
-  },
-  {
-    name: "save_video",
-    description:
-      "Save the most recently generated animation/video to the user's saved videos. Use when the user says 'save this video', 'keep this animation', 'save the video', or similar.",
-    inputSchema: {
-      json: JSON.stringify({
-        type: "object",
-        properties: {},
-        required: [],
-      }),
-    },
-  },
-  {
-    name: "animate_tryon",
-    description:
-      "Generate a short video animation from the current try-on result image. Use when the user says 'animate this', 'make a video', 'show me moving in this', 'create an animation', or similar.",
-    inputSchema: {
-      json: JSON.stringify({
-        type: "object",
-        properties: {},
-        required: [],
-      }),
-    },
-  },
-  {
-    name: "download",
-    description:
-      "Download the current try-on image or video to the user's computer. Use when the user says 'download this', 'save to my computer', 'download the image', 'download the video', or similar.",
-    inputSchema: {
-      json: JSON.stringify({
-        type: "object",
-        properties: {
-          type: {
-            type: "string",
-            enum: ["image", "video"],
-            description: "Whether to download the try-on image or the video. Default is 'image'.",
-          },
-        },
-        required: [],
-      }),
-    },
-  },
-  {
-    name: "send_tryon",
-    description:
-      "Share or send the current try-on result via the device's share functionality (email, messaging, etc). Use when the user says 'send this', 'share this', 'email this', or similar.",
-    inputSchema: {
-      json: JSON.stringify({
-        type: "object",
-        properties: {},
-        required: [],
-      }),
-    },
-  },
-  {
-    name: "recommend_items",
-    description:
-      "Visually analyze the current search results or outfit builder items against the user's actual photo to give personalized style recommendations. Use when the user asks 'which one should I try?', 'what do you recommend?', 'what looks best on me?', or any recommendation request. For smart search: returns items ranked best to worst. For outfit builder: returns the best combination (one item number per category) that work together as a cohesive outfit.",
-    inputSchema: {
-      json: JSON.stringify({
-        type: "object",
-        properties: {},
-        required: [],
-      }),
-    },
-  },
-  {
+  select_search_item: {
     name: "select_search_item",
-    description:
-      "Try on a specific item from the smart search results by its displayed number. Use this when the user says 'try on number 3', 'I want the first one', 'number 2 please', or similar, AFTER a smart search has been performed.",
-    inputSchema: {
-      json: JSON.stringify({
-        type: "object",
-        properties: {
-          number: {
-            type: "integer",
-            description:
-              "The item number (1-based) shown on the search result card",
-          },
-        },
-        required: ["number"],
-      }),
-    },
+    description: "Try on a specific item from search results by number.",
+    inputSchema: { json: JSON.stringify({ type: "object", properties: { number: { type: "integer", description: "Item number (1-based)" } }, required: ["number"] }) },
   },
-  {
+  add_to_cart: {
+    name: "add_to_cart",
+    description: "Add a product to the Amazon shopping cart.",
+    inputSchema: { json: JSON.stringify({ type: "object", properties: { product_url: { type: "string", description: "Amazon product URL" }, product_title: { type: "string", description: "Product title" } }, required: ["product_url"] }) },
+  },
+  save_favorite: {
+    name: "save_favorite",
+    description: "Save the current try-on result to favorites.",
+    inputSchema: { json: JSON.stringify({ type: "object", properties: {}, required: [] }) },
+  },
+  save_video: {
+    name: "save_video",
+    description: "Save the current animation/video.",
+    inputSchema: { json: JSON.stringify({ type: "object", properties: {}, required: [] }) },
+  },
+  animate_tryon: {
+    name: "animate_tryon",
+    description: "Generate a video animation from the try-on result. Only when user asks for animation.",
+    inputSchema: { json: JSON.stringify({ type: "object", properties: {}, required: [] }) },
+  },
+  download: {
+    name: "download",
+    description: "Download the try-on image or video to the user's computer.",
+    inputSchema: { json: JSON.stringify({ type: "object", properties: { type: { type: "string", enum: ["image", "video"], description: "image or video" } }, required: [] }) },
+  },
+  send_tryon: {
+    name: "send_tryon",
+    description: "Share or send the current try-on result.",
+    inputSchema: { json: JSON.stringify({ type: "object", properties: {}, required: [] }) },
+  },
+  recommend_items: {
+    name: "recommend_items",
+    description: "Visually analyze items against the user's photo for personalized recommendations. Only when user asks.",
+    inputSchema: { json: JSON.stringify({ type: "object", properties: {}, required: [] }) },
+  },
+  build_outfit: {
+    name: "build_outfit",
+    description: "Build a complete outfit with top, bottom, shoes, necklace, earrings, bracelets.",
+    inputSchema: { json: JSON.stringify({ type: "object", properties: { top: { type: "string", description: "Top description" }, bottom: { type: "string", description: "Bottom description" }, shoes: { type: "string", description: "Shoes description" }, necklace: { type: "string", description: "Necklace description" }, earrings: { type: "string", description: "Earrings description" }, bracelets: { type: "string", description: "Bracelets description" } }, required: [] }) },
+  },
+  select_outfit_items: {
     name: "select_outfit_items",
-    description:
-      "Select ONE item by its category and number in the outfit builder. Call this tool ONCE for EACH item the user mentions. For example, if the user says 'top number 2 and necklace number 3', call this tool TWICE: once with category='top' number=2, and once with category='necklace' number=3. Category mapping: 'upper part'/'upper'/'top' → 'top', 'lower part'/'lower'/'bottom'/'pants'/'skirt' → 'bottom', 'shoes'/'footwear'/'sneakers' → 'shoes', 'necklace'/'chain' → 'necklace', 'earrings' → 'earrings', 'bracelet'/'bracelets'/'bangle' → 'bracelets'.",
-    inputSchema: {
-      json: JSON.stringify({
-        type: "object",
-        properties: {
-          category: {
-            type: "string",
-            enum: ["top", "bottom", "shoes", "necklace", "earrings", "bracelets"],
-            description:
-              "The outfit category. MUST be one of: top, bottom, shoes, necklace, earrings, bracelets.",
-          },
-          number: {
-            type: "integer",
-            description:
-              "The 1-based item number to select in that category.",
-          },
-        },
-        required: ["category", "number"],
-      }),
-    },
+    description: "Select ONE item by category and number in the outfit builder. Call once per item.",
+    inputSchema: { json: JSON.stringify({ type: "object", properties: { category: { type: "string", enum: ["top", "bottom", "shoes", "necklace", "earrings", "bracelets"], description: "Outfit category" }, number: { type: "integer", description: "Item number (1-based)" } }, required: ["category", "number"] }) },
   },
-  {
+  confirm_outfit: {
     name: "confirm_outfit",
-    description:
-      "Execute the pending outfit action. Call ONLY after the user explicitly confirms (e.g., 'yes', 'go ahead', 'that's it', 'done'). If any of the 6 categories are still missing, you MUST set skip_missing=true — this is ONLY allowed when the user explicitly said they do NOT want those items (e.g., 'no accessories', 'just clothes', 'skip the rest', 'I don't want earrings'). If the user has NOT explicitly declined the missing categories, do NOT call confirm_outfit — instead ask about the missing categories first.",
-    inputSchema: {
-      json: JSON.stringify({
-        type: "object",
-        properties: {
-          skip_missing: {
-            type: "boolean",
-            description:
-              "Set to true ONLY if the user explicitly said they do NOT want the missing categories (e.g., 'no accessories', 'skip necklace', 'just those'). If false or omitted, confirm_outfit will be rejected when categories are missing.",
-          },
-        },
-        required: [],
-      }),
-    },
+    description: "Execute the pending outfit. Call only after user confirms.",
+    inputSchema: { json: JSON.stringify({ type: "object", properties: { skip_missing: { type: "boolean", description: "True only if user explicitly declined missing categories" } }, required: [] }) },
   },
+};
+
+// Stylist agent tools (search, try-on, actions)
+const STYLIST_TOOLS = [
+  TOOL_DEFS.smart_search, TOOL_DEFS.try_on, TOOL_DEFS.select_search_item,
+  TOOL_DEFS.add_to_cart, TOOL_DEFS.save_favorite, TOOL_DEFS.save_video,
+  TOOL_DEFS.animate_tryon, TOOL_DEFS.download, TOOL_DEFS.send_tryon,
+  TOOL_DEFS.recommend_items,
 ];
+
+// Outfit builder agent tools (outfit flow only)
+const OUTFIT_BUILDER_TOOLS = [
+  TOOL_DEFS.build_outfit, TOOL_DEFS.confirm_outfit,
+  TOOL_DEFS.select_outfit_items, TOOL_DEFS.recommend_items,
+];
+
+// ---------------------------------------------------------------------------
+// Intent detection — determines which agent should handle the user's request
+// ---------------------------------------------------------------------------
+const OUTFIT_KEYWORDS = ["outfit", "complete look", "full look", "put together", "build me", "whole outfit", "coordinate", "ensemble", "look completo", "arma un", "conjunto"];
+const CATEGORY_KEYWORDS = {
+  top: ["top", "shirt", "blouse", "t-shirt", "tee", "sweater", "hoodie", "jacket", "coat", "camisa", "blusa", "suéter", "chaqueta"],
+  bottom: ["pants", "jeans", "skirt", "shorts", "trousers", "leggings", "pantalón", "falda", "pantalones"],
+  shoes: ["shoes", "sneakers", "boots", "heels", "sandals", "loafers", "zapatos", "zapatillas", "botas", "tacones", "sandalias"],
+  necklace: ["necklace", "chain", "collar"],
+  earrings: ["earrings", "aretes", "pendientes"],
+  bracelets: ["bracelet", "bracelets", "bangle", "pulsera", "pulseras"],
+};
+
+function detectOutfitIntent(transcript) {
+  const text = (transcript || "").toLowerCase();
+
+  // Check explicit outfit keywords
+  for (const kw of OUTFIT_KEYWORDS) {
+    if (text.includes(kw)) return "outfit_builder";
+  }
+
+  // Check if 3+ distinct clothing categories mentioned
+  let categoryCount = 0;
+  for (const [, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+    if (keywords.some((kw) => text.includes(kw))) categoryCount++;
+  }
+  if (categoryCount >= 3) return "outfit_builder";
+
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Tool execution — calls back into the app's existing services
@@ -427,7 +273,7 @@ async function executeTool(toolName, argsJson, socket) {
       });
       return {
         status: "success",
-        message: `Search complete for "${args.query}". Results are now visible. Do NOT call smart_search again for this query. Ask the user which item they'd like to try on.`,
+        message: `Search started for "${args.query}". Results are loading. Do NOT say anything else about the search — you already acknowledged it. Do NOT list, describe, or name any products. Do NOT call smart_search again. Stay silent and wait for the user to speak.`,
         acknowledged: !!ack.acknowledged,
       };
     }
@@ -472,24 +318,17 @@ async function executeTool(toolName, argsJson, socket) {
           number: resolvedNumber,
         });
         return {
-          status: "success",
-          message: `Starting virtual try-on for item #${resolvedNumber} "${resolvedTitle}". The result will appear on the product page.`,
+          status: "in_progress",
+          message: `Try-on for item #${resolvedNumber} is NOW GENERATING — it is NOT finished yet. Tell the user "it's generating, one moment" and STOP talking. Do NOT say it is ready. Do NOT say it looks great. Do NOT describe the outfit. The image is NOT visible yet — WAIT silently for the user to speak first.`,
           acknowledged: !!ack.acknowledged,
         };
       }
 
-      // Fallback: open the product URL directly
-      const ack = await emitAndWaitForAck(socket, {
-        action: "try_on",
-        productTitle: resolvedTitle,
-        productUrl,
-      });
+      // No cached results — reject instead of opening a raw URL
+      console.log(`[VoiceAgent] try_on REJECTED — no cached search results to match against. Title: "${resolvedTitle}"`);
       return {
-        status: "success",
-        message: productUrl
-          ? `Starting virtual try-on for "${resolvedTitle}". The result will appear on the product page.`
-          : `Could not find the product URL for "${resolvedTitle}". Please search for this item first, then try again.`,
-        acknowledged: !!ack.acknowledged,
+        status: "error",
+        message: `Could not find "${resolvedTitle}" in the current search results. Please search for this item first using smart_search, then try again.`,
       };
     }
 
@@ -578,13 +417,25 @@ async function executeTool(toolName, argsJson, socket) {
     }
 
     case "animate_tryon": {
+      // Code-level guard: only allow if user's last transcript contains animation keywords
+      const ANIM_KEYWORDS = ["animate", "animation", "video", "move", "moving", "dance", "dancing", "twirl", "walk", "runway", "anima", "animación", "vídeo", "muévete", "baila"];
+      const lastTranscript = socket._lastUserTranscript || "";
+      const hasAnimKeyword = ANIM_KEYWORDS.some((kw) => lastTranscript.includes(kw));
+      if (!hasAnimKeyword) {
+        console.log(`[VoiceAgent] animate_tryon BLOCKED — user did not request animation. Last transcript: "${lastTranscript}"`);
+        return {
+          status: "error",
+          message: "The user did not ask for an animation. Do NOT generate animations unless the user explicitly says 'animate this', 'make a video', 'show me moving', or similar. Just respond naturally to what the user said.",
+        };
+      }
+
       const animTraceId = 'anim_' + Date.now();
       console.log(`\x1b[33m[ANIMATE TRACE ${animTraceId}] Step 0/4: Backend emitting toolAction { action: "animate_tryon" } to popup via Socket.IO\x1b[0m`);
       const ack = await emitAndWaitForAck(socket, { action: "animate_tryon" });
       console.log(`\x1b[33m[ANIMATE TRACE ${animTraceId}] Ack from popup: ${JSON.stringify(ack)} (acknowledged=${!!ack.acknowledged}, timedOut=${!ack.acknowledged})\x1b[0m`);
       return {
-        status: "success",
-        message: "Generating an animation from your try-on. This may take a moment.",
+        status: "in_progress",
+        message: "Animation is NOW GENERATING — it is NOT finished yet. Tell the user the animation is generating and STOP talking. Do NOT say it is ready. Do NOT say it looks amazing. The video is NOT visible yet — WAIT silently for the user to speak first.",
         acknowledged: !!ack.acknowledged,
       };
     }
@@ -863,6 +714,124 @@ function setupVoiceAgent(io) {
       if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
     }
 
+    // --- Dual agent state ---
+    let currentAgent = "stylist"; // "stylist" or "outfit_builder"
+    let switchInProgress = false;
+
+    /**
+     * Build a localized prompt for the given agent type using stored socket config.
+     */
+    function buildPrompt(agentType, contextSummary) {
+      const langName = socket._voiceLangName || "English";
+      const profileStr = socket._voiceProfileStr || "No profile information available";
+      const basePrompt = agentType === "outfit_builder" ? OUTFIT_BUILDER_PROMPT : STYLIST_PROMPT;
+      let prompt = basePrompt
+        .replaceAll("{{LANGUAGE}}", langName)
+        .replaceAll("{{USER_PROFILE}}", profileStr);
+      if (agentType === "outfit_builder") {
+        prompt = prompt.replaceAll("{{CONTEXT_SUMMARY}}", contextSummary || "");
+      }
+      return prompt;
+    }
+
+    /**
+     * Wire up all session callbacks (shared by both agents).
+     */
+    function wireSessionCallbacks() {
+      session.onAudioOutput = (base64Audio) => {
+        socket.emit("audioOutput", base64Audio);
+      };
+
+      session.onTextOutput = (text, role) => {
+        socket.emit("textOutput", { text, role });
+        if (role === "USER" || role === "user") {
+          socket._lastUserTranscript = (text || "").toLowerCase().trim();
+
+          // Intent detection — switch agents if needed
+          if (!switchInProgress) {
+            const intent = detectOutfitIntent(text);
+            if (intent && intent !== currentAgent) {
+              const summary = intent === "outfit_builder"
+                ? "The user was browsing clothes and now wants to build a complete outfit."
+                : "The user finished with the outfit builder and wants to browse individual items.";
+              console.log(`[VoiceAgent] Intent detected: "${intent}" (current: "${currentAgent}") — switching. Transcript: "${text}"`);
+              setTimeout(() => switchAgent(intent, summary), 150);
+            }
+          }
+        }
+        // Clear the outfit confirmation gate when user actually speaks
+        if ((role === "USER" || role === "user") && socket._awaitingOutfitConfirmation) {
+          const elapsed = Date.now() - (socket._outfitGateSetAt || 0);
+          if (elapsed >= 3000) {
+            console.log(`[VoiceAgent] User spoke after accumulation (${elapsed}ms since gate) — confirm_outfit now allowed. User said: "${text}"`);
+            socket._awaitingOutfitConfirmation = false;
+          } else {
+            console.log(`[VoiceAgent] User transcription arrived ${elapsed}ms after gate — too soon, ignoring (residual chunk). Text: "${text}"`);
+          }
+        }
+      };
+
+      session.onToolUse = async (toolName, toolUseId, content) => {
+        console.log(`[VoiceAgent] [${currentAgent}] Tool use: ${toolName} (${toolUseId})`);
+        socket.emit("toolStart", { toolName });
+
+        const result = await executeTool(toolName, content, socket);
+        console.log(`[VoiceAgent] [${currentAgent}] Tool result:`, result);
+
+        if (session && session.active) {
+          session.sendToolResult(toolUseId, result);
+        }
+        socket.emit("toolEnd", { toolName, result });
+      };
+
+      session.onError = async (err) => {
+        console.error("[VoiceAgent] Session error:", err.message);
+        socket.emit("error", { message: err.message });
+        if (session) {
+          try { await session.close(); } catch (_) {}
+          session = null;
+        }
+      };
+    }
+
+    /**
+     * Switch between stylist and outfit_builder agents.
+     * Closes current session and opens a new one with different prompt/tools.
+     */
+    async function switchAgent(targetAgent, contextSummary) {
+      if (targetAgent === currentAgent || switchInProgress) return;
+      switchInProgress = true;
+
+      try {
+        console.log(`[VoiceAgent] Switching agent: ${currentAgent} → ${targetAgent}`);
+
+        // Close current session
+        if (session) {
+          try { await session.close(); } catch (_) {}
+          session = null;
+        }
+
+        // Select prompt and tools for target agent
+        const tools = targetAgent === "outfit_builder" ? OUTFIT_BUILDER_TOOLS : STYLIST_TOOLS;
+        const prompt = buildPrompt(targetAgent, contextSummary);
+        const voiceId = socket._voiceId || "tiffany";
+
+        session = new SonicSession(prompt, tools, voiceId);
+        wireSessionCallbacks();
+        await session.start();
+
+        currentAgent = targetAgent;
+        socket.emit("agentSwitched", { agent: targetAgent });
+        console.log(`[VoiceAgent] Agent switched to ${targetAgent} for ${socket.id}`);
+        resetIdleTimer();
+      } catch (err) {
+        console.error(`[VoiceAgent] Failed to switch agent:`, err.message);
+        socket.emit("error", { message: "Failed to switch agent mode: " + err.message });
+      } finally {
+        switchInProgress = false;
+      }
+    }
+
     // --- Start a new voice session ---
     socket.on("startSession", async (config, ack) => {
       try {
@@ -874,8 +843,12 @@ function setupVoiceAgent(io) {
         const langCode = config?.language || "en";
         const langName = LANGUAGE_MAP[langCode] || "English";
 
+        // Store voice config on socket for agent switching
+        socket._voiceId = voiceId;
+        socket._voiceLangCode = langCode;
+        socket._voiceLangName = langName;
+
         // Store user context on socket for recommend_items tool
-        // Decode JWT to get userId (sub claim) — no verification needed, just extract
         let userId = null;
         if (config?.authToken) {
           try {
@@ -896,68 +869,24 @@ function setupVoiceAgent(io) {
         socket._awaitingOutfitConfirmation = false;
         socket._outfitGateSetAt = 0;
 
-        // Build user profile context
+        // Build user profile string and store on socket
         const profileParts = [];
         if (config?.firstName) profileParts.push(`Name: ${config.firstName}`);
         if (config?.sex) profileParts.push(`Sex: ${config.sex}`);
         if (config?.clothesSize) profileParts.push(`Clothing size: ${config.clothesSize}`);
         if (config?.shoesSize) profileParts.push(`Shoe size: ${config.shoesSize}`);
-        const profileStr = profileParts.length > 0
+        socket._voiceProfileStr = profileParts.length > 0
           ? profileParts.join(", ")
           : "No profile information available";
 
-        const localizedPrompt = SYSTEM_PROMPT
-          .replaceAll("{{LANGUAGE}}", langName)
-          .replaceAll("{{USER_PROFILE}}", profileStr);
-        session = new SonicSession(localizedPrompt, TOOLS, voiceId);
-
-        // Wire up output callbacks
-        session.onAudioOutput = (base64Audio) => {
-          socket.emit("audioOutput", base64Audio);
-        };
-
-        session.onTextOutput = (text, role) => {
-          socket.emit("textOutput", { text, role });
-          // Clear the outfit confirmation gate when user actually speaks
-          // (not on raw audioInput, which fires continuously even with silence)
-          if ((role === "USER" || role === "user") && socket._awaitingOutfitConfirmation) {
-            // Only clear the gate if at least 3s have passed since it was set.
-            // This prevents residual transcription chunks from the SAME utterance
-            // that triggered build_outfit/select_outfit_items from clearing the gate.
-            const elapsed = Date.now() - (socket._outfitGateSetAt || 0);
-            if (elapsed >= 3000) {
-              console.log(`[VoiceAgent] User spoke after accumulation (${elapsed}ms since gate) — confirm_outfit now allowed. User said: "${text}"`);
-              socket._awaitingOutfitConfirmation = false;
-            } else {
-              console.log(`[VoiceAgent] User transcription arrived ${elapsed}ms after gate — too soon, ignoring (residual chunk). Text: "${text}"`);
-            }
-          }
-        };
-
-        session.onToolUse = async (toolName, toolUseId, content) => {
-          console.log(`[VoiceAgent] Tool use: ${toolName} (${toolUseId})`);
-          socket.emit("toolStart", { toolName });
-
-          const result = await executeTool(toolName, content, socket);
-          console.log(`[VoiceAgent] Tool result:`, result);
-
-          // Send result back to Nova Sonic
-          session.sendToolResult(toolUseId, result);
-          socket.emit("toolEnd", { toolName, result });
-        };
-
-        session.onError = async (err) => {
-          console.error("[VoiceAgent] Session error:", err.message);
-          socket.emit("error", { message: err.message });
-          // Clean up dead session so client can restart
-          if (session) {
-            try { await session.close(); } catch (_) {}
-            session = null;
-          }
-        };
+        // Default to Stylist agent
+        currentAgent = "stylist";
+        const prompt = buildPrompt("stylist");
+        session = new SonicSession(prompt, STYLIST_TOOLS, voiceId);
+        wireSessionCallbacks();
 
         await session.start();
-        console.log("[VoiceAgent] Session started for", socket.id);
+        console.log(`[VoiceAgent] Session started (stylist) for ${socket.id}`);
         resetIdleTimer();
 
         if (typeof ack === "function") ack({ status: "ok" });
@@ -997,6 +926,7 @@ function setupVoiceAgent(io) {
         } else {
           console.log(`[VoiceAgent] Cached ${data.products.length} search results (no screenshot)`);
         }
+
       }
     });
 
