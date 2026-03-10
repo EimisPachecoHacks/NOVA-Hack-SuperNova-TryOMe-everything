@@ -42,6 +42,7 @@ function buildSmartPrompt(garmentClass, outfitInfo, framing) {
   const STUDIO_SUFFIX =
     FRAMING_PREFIX +
     "CRITICAL: The output MUST be the EXACT same person from the first image — same face, same skin tone, same body, same hair. Do NOT generate a different person. " +
+    "POSE PRESERVATION: Keep the EXACT same pose, body angle, arm position, and stance as the person in the first image. Do NOT change the pose. The person must be standing/posing in the IDENTICAL position. " +
     "White studio background. Photorealistic. Output only the image." + FRAMING_SUFFIX;
 
   // --- No conflict cases ---
@@ -70,7 +71,7 @@ function buildSmartPrompt(garmentClass, outfitInfo, framing) {
 
   // Trying on a full body garment (dress, jumpsuit, or matching set): always replaces everything
   if (["FULL_BODY", "LONG_DRESS", "SHORT_DRESS", "FULL_BODY_OUTFIT"].includes(garmentClass)) {
-    return `You are a professional virtual try-on system. Take the person in the first image. COMPLETELY REMOVE all their current clothing — every single piece (top, bottom, everything). Then dress them in the COMPLETE outfit shown in the second image. IMPORTANT: The second image may show a SINGLE garment (dress, jumpsuit) OR a MATCHING SET (top + bottom sold together, such as a tankini set, co-ord set, swimsuit set, pajama set). If it is a matching set with multiple pieces, you MUST put ALL pieces on the person — both the top AND the bottom. The person must be wearing NOTHING except the garment(s) from the second image. Reproduce every detail of the garment(s) faithfully: pattern, print, color, fabric texture, cut, and fit. ${STUDIO_SUFFIX}`;
+    return `You are a professional virtual try-on system. Take the person in the first image and dress them in the outfit from the second image. REMOVE ALL original clothing first — the person's original shirt, pants, jeans, shorts, skirt must ALL be removed and replaced. The person should ONLY be wearing the garment(s) from the second image. Below a dress or skirt, show BARE LEGS with skin — absolutely no pants or jeans underneath. The second image may show a single garment (dress, jumpsuit) or a matching set (top + bottom). If it is a set, put ALL pieces on the person. Reproduce every detail faithfully: pattern, print, color, fabric texture, cut, and fit. ${STUDIO_SUFFIX}`;
   }
 
   // Person wearing separate top+bottom (no conflict for top or bottom)
@@ -141,7 +142,7 @@ async function virtualTryOn(sourceImageBase64, referenceImageBase64, garmentClas
   console.log(`\x1b[34m  │ strategy:\x1b[0m     \x1b[1m\x1b[33m${strategy}\x1b[0m`);
   console.log(`\x1b[34m  │ \x1b[1mFULL PROMPT:\x1b[0m`);
   console.log(`\x1b[33m  │ ${prompt}\x1b[0m`);
-  const modelId = garmentClass === "ACCESSORY" ? "gemini-3-pro-image-preview" : "gemini-2.5-flash-image";
+  const modelId = "gemini-3.1-flash-image-preview";
   console.log(`\x1b[34m  │ model:\x1b[0m        \x1b[1m${modelId}\x1b[0m`);
   console.log(`\x1b[34m  └─── CALLING GEMINI API... ───┘\x1b[0m`);
 
@@ -153,7 +154,7 @@ async function virtualTryOn(sourceImageBase64, referenceImageBase64, garmentClas
         {
           role: "user",
           parts: [
-            { text: "This is the person. Keep this EXACT person — same face, skin, body, hair:" },
+            { text: "This is the person. Keep this EXACT person — same face, skin, body, hair, and EXACT SAME POSE (body angle, arm position, stance):" },
             {
               inlineData: {
                 mimeType: "image/jpeg",
@@ -242,7 +243,7 @@ CRITICAL RULES:
 - Photorealistic result. Output only the resulting image.`;
 
   const response = await client.models.generateContent({
-    model: "gemini-2.5-flash-image",
+    model: "gemini-3.1-flash-image-preview",
     contents: [
       {
         role: "user",
@@ -353,7 +354,7 @@ OUTPUT REQUIREMENTS:
   );
 
   const response = await client.models.generateContent({
-    model: "gemini-3-pro-image-preview",
+    model: "gemini-3.1-flash-image-preview",
     contents: contents,
     config: {
       responseModalities: ["TEXT", "IMAGE"],
@@ -445,7 +446,7 @@ CRITICAL: Output ONLY ONE person in the image. Do NOT create a side-by-side comp
   console.log(`\x1b[34m  └─── CALLING GEMINI API (single outfit call)... ───┘\x1b[0m`);
 
   const response = await client.models.generateContent({
-    model: "gemini-3-pro-image-preview",
+    model: "gemini-3.1-flash-image-preview",
     contents: [{ role: "user", parts }],
     config: {
       responseModalities: ["TEXT", "IMAGE"],

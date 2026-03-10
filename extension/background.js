@@ -5,7 +5,7 @@
  * Handles auth token injection for all API calls.
  */
 
-const DEFAULT_BACKEND_URL = "http://localhost:3000";
+const DEFAULT_BACKEND_URL = "http://98.91.240.78:3000";
 
 async function getBackendUrl() {
   return new Promise((resolve) => {

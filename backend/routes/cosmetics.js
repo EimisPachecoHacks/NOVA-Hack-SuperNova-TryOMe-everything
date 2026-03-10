@@ -8,6 +8,30 @@ const { getClient } = require("../services/gemini");
 // Supported cosmetic types
 const COSMETIC_TYPES = ["lipstick", "eyeshadow", "blush", "foundation", "eyeliner", "mascara"];
 
+// Normalize fancy color names to standard Gemini-friendly colors
+function normalizeColor(color) {
+  if (!color) return color;
+  const c = color.toLowerCase().trim();
+  // Map compound/fancy names to base colors
+  const mappings = {
+    "berry red": "red", "berry pink": "pink", "berry mauve": "mauve",
+    "coral pink": "coral", "coral red": "coral", "dusty rose": "rose",
+    "deep plum": "plum", "dark plum": "plum", "hot pink": "pink",
+    "baby pink": "light pink", "neon pink": "bright pink",
+    "burnt orange": "orange", "rust": "brown", "cranberry": "dark red",
+    "cherry red": "red", "wine red": "burgundy", "brick red": "red",
+    "rosy pink": "rose", "peach pink": "peach", "salmon pink": "salmon",
+    "dusty pink": "pink", "mauve pink": "mauve", "plum purple": "plum",
+  };
+  if (mappings[c]) return mappings[c];
+  // If it contains a known base color, extract it
+  const baseColors = ["red", "pink", "nude", "brown", "coral", "peach", "plum", "mauve", "burgundy", "rose", "orange", "purple", "berry"];
+  for (const base of baseColors) {
+    if (c.includes(base)) return base;
+  }
+  return color; // Return original if no mapping found
+}
+
 router.post("/", optionalAuth, async (req, res, next) => {
   try {
     let { faceImage, cosmeticType, color, faceIndex, productImage } = req.body;
@@ -30,6 +54,13 @@ router.post("/", optionalAuth, async (req, res, next) => {
 
     if (!faceImage || !cosmeticType || !color) {
       return res.status(400).json({ error: "faceImage, cosmeticType, and color are required" });
+    }
+
+    // Normalize color to prevent Gemini rejecting fancy names like "berry red"
+    const originalColor = color;
+    color = normalizeColor(color);
+    if (color !== originalColor) {
+      console.log(`[cosmetics] Color normalized: "${originalColor}" → "${color}"`);
     }
 
     const type = cosmeticType.toLowerCase();
@@ -59,7 +90,7 @@ router.post("/", optionalAuth, async (req, res, next) => {
     }
 
     const colorRef = productImage
-      ? `Match the EXACT color, shade, and finish visible in the product image (second image). The color name "${color}" is just a hint — the product image is the true color reference.`
+      ? `Match the EXACT color, shade, and finish visible in the product image (second image).`
       : `Apply ${color} color.`;
 
     parts.push({ text: `You are a professional makeup artist AI. Apply ${type} to the person in the first image.

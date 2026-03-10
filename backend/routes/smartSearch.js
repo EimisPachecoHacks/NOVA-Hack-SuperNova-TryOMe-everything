@@ -30,9 +30,11 @@ router.post("/", optionalAuth, async (req, res, next) => {
   } catch (error) {
     console.error(`[smartSearch] Error:`, error.message);
 
-    // Return a user-friendly error instead of letting it fall through to the generic 500 handler
-    let userMessage = "Smart search encountered an issue. Please try again.";
-    if (error.message.includes("timed out")) {
+    // Return the actual error so the user sees what really happened
+    let userMessage = error.message || "Smart search encountered an issue. Please try again.";
+    if (error.message.includes("DAILY_QUOTA_LIMIT_EXCEEDED")) {
+      userMessage = "Nova Act daily quota limit exceeded. Smart search is unavailable until the quota resets tomorrow.";
+    } else if (error.message.includes("timed out")) {
       userMessage = "The search took too long — please try a simpler query or try again in a moment.";
     } else if (error.message.includes("Failed to spawn Python") || error.message.includes("ENOENT")) {
       userMessage = "Smart search is temporarily unavailable. The search service could not be started.";

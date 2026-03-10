@@ -106,9 +106,12 @@ router.post("/", optionalAuth, async (req, res, next) => {
       if (profile) {
         // Use selected pose from generatedPhotoKeys, fallback to bodyPhotoKey
         const idx = typeof poseIndex === "number" ? Math.max(0, Math.min(poseIndex, (profile.generatedPhotoKeys || []).length - 1)) : 0;
+        console.log(`[tryOn] poseIndex=${poseIndex}, resolved idx=${idx}, generatedPhotoKeys=${(profile.generatedPhotoKeys || []).length} keys`);
         if (profile.generatedPhotoKeys && profile.generatedPhotoKeys.length > 0 && profile.generatedPhotoKeys[idx]) {
+          console.log(`[tryOn] Using generated pose photo: ${profile.generatedPhotoKeys[idx]}`);
           sourceImage = await fetchPhotoFromS3(profile.generatedPhotoKeys[idx]);
         } else if (profile.bodyPhotoKey) {
+          console.log(`[tryOn] FALLBACK to bodyPhotoKey: ${profile.bodyPhotoKey}`);
           sourceImage = await fetchPhotoFromS3(profile.bodyPhotoKey);
         }
       }

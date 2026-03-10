@@ -57,8 +57,10 @@ def smart_search(query: str, headless: bool = True) -> list[dict]:
     all_products: list[Product] = []
     seen_titles: set[str] = set()
 
+    api_key = os.environ.get("NOVA_ACT_API_KEY", "NOT SET")
     log(f"Starting smart search for: {query}")
     log(f"Headless mode: {headless}")
+    log(f"NOVA_ACT_API_KEY: {api_key[:8]}...{api_key[-4:] if len(api_key) > 12 else api_key}")
 
     with NovaAct(
         starting_page=AMAZON_URL,
