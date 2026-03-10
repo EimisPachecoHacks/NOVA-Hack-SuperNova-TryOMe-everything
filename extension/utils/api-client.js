@@ -38,7 +38,7 @@ class ApiClient {
 
   // --- Virtual Try-On ---
 
-  static tryOn(bodyImageBase64, garmentImageBase64, garmentClass, mergeStyle = "SEAMLESS", framing = "full", poseIndex = 0) {
+  static tryOn(bodyImageBase64, garmentImageBase64, garmentClass, mergeStyle = "SEAMLESS", framing = "full", poseIndex = 0, analysisResult = null) {
     return ApiClient._sendMessage({
       type: "TRY_ON",
       bodyImageBase64,
@@ -47,6 +47,7 @@ class ApiClient {
       mergeStyle,
       framing,
       poseIndex,
+      analysisResult,
     });
   }
 

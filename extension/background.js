@@ -276,8 +276,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
 
         case "TRY_ON": {
-          console.log(`[background] TRY_ON — framing: "${message.framing}", poseIndex: ${message.poseIndex}, garmentClass: "${message.garmentClass}"`);
-          const result = await apiPost("/api/try-on", {
+          console.log(`[background] TRY_ON — framing: "${message.framing}", poseIndex: ${message.poseIndex}, garmentClass: "${message.garmentClass}", hasAnalysis: ${!!message.analysisResult}`);
+          const tryOnBody = {
             sourceImage: message.bodyImageBase64,
             referenceImage: message.garmentImageBase64,
             garmentClass: message.garmentClass,
@@ -285,7 +285,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             framing: message.framing || "full",
             poseIndex: message.poseIndex ?? 0,
             quickMode: message.quickMode || false,
-          });
+          };
+          if (message.analysisResult) tryOnBody.analysisResult = message.analysisResult;
+          const result = await apiPost("/api/try-on", tryOnBody);
           sendResponse({ data: result });
           break;
         }

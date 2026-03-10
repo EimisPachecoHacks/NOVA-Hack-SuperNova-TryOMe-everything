@@ -648,7 +648,8 @@
           analysisResult ? analysisResult.garmentClass : null,
           "SEAMLESS",
           currentFraming,
-          currentPoseIdx
+          currentPoseIdx,
+          analysisResult
         );
         resultImage = response.resultImage;
         debugInfo = response.debug;

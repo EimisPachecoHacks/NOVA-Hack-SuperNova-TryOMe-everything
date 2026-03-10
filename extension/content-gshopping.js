@@ -245,7 +245,8 @@
           analysis ? analysis.garmentClass : null,
           "SEAMLESS",
           currentFraming,
-          poseIdx
+          poseIdx,
+          analysis
         );
         resultImage = resp.resultImage;
       }

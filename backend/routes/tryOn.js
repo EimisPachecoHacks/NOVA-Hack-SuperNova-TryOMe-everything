@@ -98,7 +98,7 @@ const ACCESSORY_SUB_CLASSES = ["EARRINGS", "NECKLACE", "BRACELET", "RING", "WATC
 
 router.post("/", optionalAuth, async (req, res, next) => {
   try {
-    let { sourceImage, referenceImage, garmentClass, mergeStyle, framing, poseIndex, quickMode } = req.body;
+    let { sourceImage, referenceImage, garmentClass, mergeStyle, framing, poseIndex, quickMode, analysisResult: frontendAnalysis } = req.body;
 
     // If authenticated and no sourceImage provided, fetch from S3
     if (!sourceImage && req.userId) {
@@ -198,30 +198,40 @@ router.post("/", optionalAuth, async (req, res, next) => {
 
     // ═══════════════════════════════════════════════════
     // STEP 1: PRODUCT ANALYSIS (Nova 2 Lite via Bedrock)
+    // Skip if frontend already provided analysis result
     // ═══════════════════════════════════════════════════
-    analysisResult = null;
-    try {
-      console.log(`\n\x1b[1m\x1b[35m▶ STEP 1: PRODUCT ANALYSIS [Nova 2 Lite via Bedrock]\x1b[0m`);
-      console.log(`\x1b[90m  ℹ Analyze the product image to detect garment type, color, and category\x1b[0m`);
-      const s1 = Date.now();
-      analysisResult = await analyzeProduct(referenceImage, "", "");
-      const s1t = ((Date.now() - s1) / 1000).toFixed(1);
-      // Always prefer Step 1's classification — the frontend may have run a separate
-      // analysis call that returned a different result (Nova 2 Lite is non-deterministic).
-      // Step 1 is the authoritative classification for the try-on pipeline.
-      if (analysisResult.garmentClass) {
-        garmentClass = analysisResult.garmentClass;
-      }
-      console.log(`\x1b[32m  ✓ STEP 1 COMPLETE\x1b[0m \x1b[90m(${s1t}s)\x1b[0m`);
+    if (frontendAnalysis && frontendAnalysis.garmentClass) {
+      // Use frontend's analysis — skip the redundant backend call (~2-3s saved)
+      analysisResult = frontendAnalysis;
+      garmentClass = analysisResult.garmentClass;
+      console.log(`\n\x1b[1m\x1b[35m▶ STEP 1: PRODUCT ANALYSIS [SKIPPED — using frontend analysis]\x1b[0m`);
       console.log(`\x1b[36m    garmentClass:\x1b[0m      \x1b[1m${analysisResult.garmentClass}\x1b[0m`);
       console.log(`\x1b[36m    garmentSubClass:\x1b[0m   ${analysisResult.garmentSubClass || "N/A"}`);
       console.log(`\x1b[36m    category:\x1b[0m          ${analysisResult.category}`);
       console.log(`\x1b[36m    color:\x1b[0m             ${analysisResult.color || "N/A"}`);
-      debugSteps.push({ step: "1", name: "PRODUCT ANALYSIS", model: "Nova 2 Lite via Bedrock", time: s1t + "s", result: analysisResult });
-    } catch (err) {
-      console.warn(`\x1b[31m  ✗ STEP 1 FAILED:\x1b[0m ${err.message}`);
-      if (!garmentClass) garmentClass = "UPPER_BODY";
-      debugSteps.push({ step: "1", name: "PRODUCT ANALYSIS", model: "Nova 2 Lite via Bedrock", time: "0s", result: { error: err.message, fallback: garmentClass } });
+      debugSteps.push({ step: "1", name: "PRODUCT ANALYSIS", model: "SKIPPED (frontend)", time: "0s", result: analysisResult });
+    } else {
+      analysisResult = null;
+      try {
+        console.log(`\n\x1b[1m\x1b[35m▶ STEP 1: PRODUCT ANALYSIS [Nova 2 Lite via Bedrock]\x1b[0m`);
+        console.log(`\x1b[90m  ℹ Analyze the product image to detect garment type, color, and category\x1b[0m`);
+        const s1 = Date.now();
+        analysisResult = await analyzeProduct(referenceImage, "", "");
+        const s1t = ((Date.now() - s1) / 1000).toFixed(1);
+        if (analysisResult.garmentClass) {
+          garmentClass = analysisResult.garmentClass;
+        }
+        console.log(`\x1b[32m  ✓ STEP 1 COMPLETE\x1b[0m \x1b[90m(${s1t}s)\x1b[0m`);
+        console.log(`\x1b[36m    garmentClass:\x1b[0m      \x1b[1m${analysisResult.garmentClass}\x1b[0m`);
+        console.log(`\x1b[36m    garmentSubClass:\x1b[0m   ${analysisResult.garmentSubClass || "N/A"}`);
+        console.log(`\x1b[36m    category:\x1b[0m          ${analysisResult.category}`);
+        console.log(`\x1b[36m    color:\x1b[0m             ${analysisResult.color || "N/A"}`);
+        debugSteps.push({ step: "1", name: "PRODUCT ANALYSIS", model: "Nova 2 Lite via Bedrock", time: s1t + "s", result: analysisResult });
+      } catch (err) {
+        console.warn(`\x1b[31m  ✗ STEP 1 FAILED:\x1b[0m ${err.message}`);
+        if (!garmentClass) garmentClass = "UPPER_BODY";
+        debugSteps.push({ step: "1", name: "PRODUCT ANALYSIS", model: "Nova 2 Lite via Bedrock", time: "0s", result: { error: err.message, fallback: garmentClass } });
+      }
     }
 
     // Validate garmentClass

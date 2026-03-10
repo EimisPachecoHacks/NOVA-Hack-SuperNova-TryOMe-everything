@@ -452,7 +452,8 @@ async function handleTryOn(index) {
         analysisResult ? analysisResult.garmentClass : null, // garmentClass from analysis
         "SEAMLESS",                                        // mergeStyle
         currentFraming,                                    // framing from side panel
-        currentPoseIndex                                   // poseIndex from side panel
+        currentPoseIndex,                                  // poseIndex from side panel
+        analysisResult                                     // skip backend Step 1 re-analysis
       ),
       180000
     );
