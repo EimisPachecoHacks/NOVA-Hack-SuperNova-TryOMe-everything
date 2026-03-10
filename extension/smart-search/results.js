@@ -704,7 +704,7 @@ async function handleAnimateResult(body, base64Image, btn, product) {
           videoUrlForSave = videoSrc;
         }
         const asin = product.productId || product.asin || "";
-        await ApiClient.saveVideo(videoUrlForSave, videoBase64ForSave, asin, product.title || "", product.image_url || "");
+        await ApiClient.saveVideo(videoUrlForSave, videoBase64ForSave, asin, product.title || "", product.image_url || "", "amazon");
         saveBtn.textContent = "\u2705 Saved!";
         setTimeout(() => { saveBtn.textContent = "\u{1F4BE} Save Video"; saveBtn.disabled = false; }, 3000);
       } catch (err) {

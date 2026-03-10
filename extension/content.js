@@ -1148,7 +1148,8 @@
             videoResult.videoBase64 || null,
             pid,
             productData?.title || "",
-            productData?.imageUrl || ""
+            productData?.imageUrl || "",
+            productData?.retailer || "amazon"
           );
           saveBtn.textContent = "Saved!";
         } catch (err) {

@@ -944,6 +944,7 @@ async function handleSaveVideo() {
         videoUrl,
         productTitle,
         outfitItems,
+        retailer: "amazon",
       },
     });
     console.log("[Wardrobe] Video saved successfully");

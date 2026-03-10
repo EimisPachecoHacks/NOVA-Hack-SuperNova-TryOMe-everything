@@ -44,38 +44,6 @@ async function virtualTryOn(sourceImageBase64, referenceImageBase64, garmentClas
 }
 
 /**
- * Inpainting using Nova Canvas
- * Used for cosmetics try-on - applies makeup to specific facial regions
- */
-async function inpaint(sourceImageBase64, maskPrompt, textPrompt) {
-  console.log(`[novaCanvas] inpaint - maskPrompt: "${maskPrompt}", textPrompt: "${textPrompt}"`);
-
-  const requestBody = {
-    taskType: "INPAINTING",
-    inPaintingParams: {
-      image: sourceImageBase64,
-      maskPrompt: maskPrompt,
-      text: textPrompt
-    },
-    imageGenerationConfig: {
-      numberOfImages: 1,
-      quality: "premium"
-    }
-  };
-
-  const response = await bedrockClient.send(new InvokeModelCommand({
-    modelId: "amazon.nova-canvas-v1:0",
-    contentType: "application/json",
-    accept: "application/json",
-    body: JSON.stringify(requestBody)
-  }));
-
-  const result = JSON.parse(new TextDecoder().decode(response.body));
-  console.log(`[novaCanvas] inpaint - success, got ${result.images.length} image(s)`);
-  return result.images[0];
-}
-
-/**
  * Background removal using Nova Canvas
  */
 async function removeBackground(imageBase64) {
@@ -100,4 +68,4 @@ async function removeBackground(imageBase64) {
   return result.images[0];
 }
 
-module.exports = { virtualTryOn, inpaint, removeBackground };
+module.exports = { virtualTryOn, removeBackground };

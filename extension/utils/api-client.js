@@ -89,12 +89,12 @@ class ApiClient {
     });
   }
 
-  static saveVideo(videoUrl, videoBase64, asin, productTitle, productImage) {
+  static saveVideo(videoUrl, videoBase64, asin, productTitle, productImage, retailer = "amazon") {
     return ApiClient._sendMessage({
       type: "API_CALL",
       endpoint: "/api/video/save",
       method: "POST",
-      data: { videoUrl, videoBase64, asin, productTitle, productImage },
+      data: { videoUrl, videoBase64, asin, productTitle, productImage, retailer },
     });
   }
 

@@ -842,6 +842,10 @@ async function showVideosView() {
       const title = video.productTitle || video.asin || 'Try-on video';
       const shortTitle = title.split(' ').slice(0, 5).join(' ');
       const hasOutfitItems = video.outfitItems && video.outfitItems.length > 0;
+      const retailerLabels = { amazon: 'Amazon', shein: 'Shein', temu: 'Temu', google_shopping: 'Google Shopping' };
+      const videoRetailer = video.retailer || 'amazon';
+      const videoRetailerName = retailerLabels[videoRetailer] || videoRetailer.charAt(0).toUpperCase() + videoRetailer.slice(1);
+      const videoRetailerClass = videoRetailer.replace('_', '-');
 
       // Build outfit item rows (like favorites outfit card)
       let outfitItemsHtml = '';
@@ -862,8 +866,8 @@ async function showVideosView() {
           ${video.videoUrl ? `<video class="video-card-video" controls preload="metadata"><source src="${video.videoUrl}" type="video/mp4"></video>` : '<div class="video-card-placeholder">Video unavailable</div>'}
         </div>
         <div class="video-card-body">
+          <span class="fav-card-retailer fav-retailer-${videoRetailerClass}">${videoRetailerName}</span>
           ${hasOutfitItems ? `
-            <span class="fav-card-retailer fav-retailer-amazon">Amazon</span>
             <div class="video-card-title">Outfit (${video.outfitItems.length} items)</div>
             ${outfitItemsHtml}
             <div class="video-card-meta">${date}</div>
