@@ -3,6 +3,7 @@ const router = express.Router();
 const { spawn } = require("child_process");
 const path = require("path");
 const { optionalAuth } = require("../middleware/auth");
+const { classifySearchQuery } = require("../services/novaLite");
 
 const PYTHON_SCRIPT = path.join(__dirname, "..", "python-services", "smart_search.py");
 const PYTHON_VENV = path.join(__dirname, "..", "python-services", "venv", "bin", "python3");
@@ -10,7 +11,7 @@ const SEARCH_TIMEOUT = 180000; // 3 minutes max for Nova Act
 
 router.post("/", optionalAuth, async (req, res, next) => {
   try {
-    const { query } = req.body;
+    const { query, sex, clothesSize, shoesSize } = req.body;
 
     if (!query || typeof query !== "string" || query.trim().length === 0) {
       return res.status(400).json({ error: "query is required" });
@@ -21,6 +22,32 @@ router.post("/", optionalAuth, async (req, res, next) => {
     let sanitizedQuery = query.trim();
     for (const [bad, good] of Object.entries(GUARDRAIL_REPLACEMENTS)) {
       sanitizedQuery = sanitizedQuery.replace(new RegExp(`\\b${bad}\\b`, "gi"), good);
+    }
+
+    // Use Nova 2 Lite to classify the query and enrich with size/sex
+    if (sex || clothesSize || shoesSize) {
+      const sizeParts = [];
+
+      // Add sex suffix if not already present
+      if (sex && !sanitizedQuery.toLowerCase().includes("for men") && !sanitizedQuery.toLowerCase().includes("for women")) {
+        sizeParts.push(sex === "male" ? "for men" : "for women");
+      }
+
+      // AI classification: clothing → clothesSize, shoes → shoesSize, other → no size
+      if (clothesSize || shoesSize) {
+        const category = await classifySearchQuery(sanitizedQuery);
+        console.log(`[smartSearch] AI category: "${category}" for query: "${sanitizedQuery}"`);
+        if (category === "clothing" && clothesSize) {
+          sizeParts.push(`size ${clothesSize}`);
+        } else if (category === "shoes" && shoesSize) {
+          sizeParts.push(`size ${shoesSize}`);
+        }
+        // "other" (accessories, cosmetics, etc.) → no size appended
+      }
+
+      if (sizeParts.length) {
+        sanitizedQuery = `${sanitizedQuery} ${sizeParts.join(" ")}`;
+      }
     }
 
     const startTime = Date.now();
@@ -56,6 +83,23 @@ router.post("/", optionalAuth, async (req, res, next) => {
 });
 
 /**
+ * Track active child processes for graceful shutdown cleanup.
+ */
+const activeChildren = new Set();
+
+function killAllChildren() {
+  for (const child of activeChildren) {
+    try {
+      if (!child.killed) {
+        console.log(`[smartSearch] Killing child process ${child.pid}`);
+        child.kill("SIGKILL");
+      }
+    } catch (_) {}
+  }
+  activeChildren.clear();
+}
+
+/**
  * Spawn the Python smart_search.py script and collect JSON output.
  */
 function runPythonSearch(query) {
@@ -72,6 +116,8 @@ function runPythonSearch(query) {
       timeout: SEARCH_TIMEOUT,
     });
 
+    activeChildren.add(child);
+
     let stdout = "";
     let stderr = "";
 
@@ -87,6 +133,7 @@ function runPythonSearch(query) {
     });
 
     child.on("close", (code) => {
+      activeChildren.delete(child);
       if (code !== 0 && !stdout.trim()) {
         reject(new Error(`Python process exited with code ${code}: ${stderr}`));
         return;
@@ -129,4 +176,5 @@ function runPythonSearch(query) {
   });
 }
 
+router.killAllChildren = killAllChildren;
 module.exports = router;

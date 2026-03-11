@@ -169,8 +169,73 @@ if (missingOptional.length) {
   log.warn(`Missing optional env vars: ${missingOptional.join(", ")}`);
 }
 
-server.listen(PORT, () => {
-  log.info(`NovaTryOnMe backend running on port ${PORT}`);
-  log.info(`Health check: http://localhost:${PORT}/`);
-  log.info(`AWS Region: ${process.env.AWS_REGION || "us-east-1"}`);
-});
+// ---------------------------------------------------------------------------
+// Graceful shutdown — close server, Socket.IO, child processes, then exit
+// ---------------------------------------------------------------------------
+let isShuttingDown = false;
+
+function gracefulShutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  log.info(`${signal} received — shutting down gracefully`);
+
+  // 1. Stop accepting new connections
+  server.close(() => {
+    log.info("HTTP server closed");
+  });
+
+  // 2. Close all Socket.IO connections
+  try { io.close(); } catch (_) {}
+
+  // 3. Kill tracked child processes (smart search Python/Chromium)
+  try {
+    const { killAllChildren } = require("./routes/smartSearch");
+    killAllChildren();
+  } catch (_) {}
+
+  // 4. Close active voice sessions
+  try {
+    const { cleanupAllSessions } = require("./routes/voiceAgent");
+    cleanupAllSessions();
+  } catch (_) {}
+
+  // 5. Force exit after 4s if cleanup hangs
+  setTimeout(() => {
+    log.warn("Forced exit after 4s shutdown timeout");
+    process.exit(1);
+  }, 4000).unref();
+
+  // Give cleanup 1s then exit cleanly
+  setTimeout(() => process.exit(0), 1000).unref();
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+// ---------------------------------------------------------------------------
+// Start server with EADDRINUSE retry
+// ---------------------------------------------------------------------------
+function startServer(port, retriesLeft) {
+  if (retriesLeft === undefined) retriesLeft = 3;
+
+  server.listen(port, () => {
+    log.info(`NovaTryOnMe backend running on port ${port}`);
+    log.info(`Health check: http://localhost:${port}/`);
+    log.info(`AWS Region: ${process.env.AWS_REGION || "us-east-1"}`);
+    // Tell PM2 the server is ready
+    if (typeof process.send === "function") process.send("ready");
+  });
+
+  server.on("error", (err) => {
+    if (err.code === "EADDRINUSE" && retriesLeft > 0) {
+      log.warn(`Port ${port} in use, retrying in 2s... (${retriesLeft} retries left)`);
+      server.removeAllListeners("error");
+      setTimeout(() => startServer(port, retriesLeft - 1), 2000);
+    } else {
+      log.error(`Cannot start server: ${err.message}`);
+      process.exit(1);
+    }
+  });
+}
+
+startServer(PORT);

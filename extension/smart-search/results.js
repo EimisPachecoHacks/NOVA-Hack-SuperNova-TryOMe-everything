@@ -31,26 +31,10 @@ const clothesSize = params.get("clothesSize") || "";
 const shoesSize = params.get("shoesSize") || "";
 const userSex = params.get("sex") || "";
 
-// Build enriched query with user's size preferences
+// Query enrichment (sex/size) is now handled by the backend using Nova 2 Lite AI classification.
+// We pass the raw query + profile params to the backend, which intelligently decides
+// whether to append clothesSize (clothing), shoesSize (shoes), or nothing (accessories).
 let query = rawQuery;
-if (query) {
-  const sizeParts = [];
-  // Add sex-appropriate suffix if not already in query
-  if (userSex && !query.toLowerCase().includes("for men") && !query.toLowerCase().includes("for women")) {
-    sizeParts.push(userSex === "male" ? "for men" : "for women");
-  }
-  // Add clothes size for apparel queries (skip if query is clearly about shoes only)
-  const isShoeQuery = /\bshoes?\b|\bsneakers?\b|\bboots?\b|\bsandals?\b|\bheels?\b/i.test(query);
-  if (clothesSize && !isShoeQuery) {
-    sizeParts.push(`size ${clothesSize}`);
-  }
-  if (shoesSize && isShoeQuery) {
-    sizeParts.push(`size ${shoesSize}`);
-  }
-  if (sizeParts.length) {
-    query = `${rawQuery} ${sizeParts.join(" ")}`;
-  }
-}
 
 document.getElementById("searchQuery").textContent = rawQuery
   ? `Results for: "${rawQuery}"`
@@ -119,6 +103,9 @@ async function startSearch(q) {
     const result = await ApiClient._sendMessage({
       type: "SMART_SEARCH",
       query: q,
+      sex: userSex || undefined,
+      clothesSize: clothesSize || undefined,
+      shoesSize: shoesSize || undefined,
     });
 
     const elapsedSeconds = stopTimer();

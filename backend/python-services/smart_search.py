@@ -2,8 +2,8 @@
 """
 NovaTryOnMe - Smart Search with Amazon Nova Act
 
-Searches Amazon for products using natural language, applies the mandatory
-4-star+ customer review filter, and extracts up to 20 product listings.
+Searches Amazon for products using natural language, sorts by
+Avg. Customer Review, and extracts up to 20 product listings.
 
 Usage:
     python smart_search.py --query "black dresses for women"
@@ -51,8 +51,8 @@ MAX_SCROLL_ROUNDS = 5
 # ---------------------------------------------------------------------------
 def smart_search(query: str, headless: bool = True) -> list[dict]:
     """
-    Search Amazon for `query`, apply 4★+ filter, extract up to 20 products.
-    Returns a list of product dicts.
+    Search Amazon for `query`, sort by Avg. Customer Review,
+    extract up to 20 products. Returns a list of product dicts.
     """
     all_products: list[Product] = []
     seen_titles: set[str] = set()
@@ -60,9 +60,18 @@ def smart_search(query: str, headless: bool = True) -> list[dict]:
     log(f"Starting smart search for: {query}")
     log(f"Headless mode: {headless}")
 
+    # Use a real Chrome user-agent to avoid Amazon's headless browser detection
+    # which strips prices and ratings from search results
+    CHROME_UA = (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/131.0.0.0 Safari/537.36"
+    )
+
     with NovaAct(
         starting_page=AMAZON_URL,
         headless=headless,
+        user_agent=CHROME_UA,
     ) as nova:
         # Step 1: Search for the query
         log("Step 1: Searching Amazon...")
@@ -70,33 +79,36 @@ def smart_search(query: str, headless: bool = True) -> list[dict]:
             f"Type '{query}' into the search bar and press Enter to search."
         )
 
-        # Step 2: Apply 4-star+ customer reviews filter
-        log("Step 2: Applying 4★+ customer review filter...")
+        # Step 2: Apply 4-star filter AND sort by Avg. Customer Review
+        log("Step 2: Filtering 4★+ and sorting by review...")
         try:
             nova.act(
-                "On the left sidebar, find the 'Customer Reviews' section. "
-                "Click on '4 Stars & Up' to filter results by 4+ star ratings."
+                "On the left sidebar, find the 'Customer Reviews' section "
+                "and click on '4 Stars & Up'. Then click the sort dropdown "
+                "(it may say 'Featured' or 'Sort by') and select "
+                "'Avg. Customer Review'."
             )
         except Exception as e:
-            log(f"Warning: Could not apply star filter: {e}")
-            # Try alternative approach
-            try:
-                nova.act(
-                    "Look for a filter or refinement option for customer reviews "
-                    "and select 4 stars and up."
-                )
-            except Exception:
-                log("Warning: Star filter not found, proceeding without it.")
+            log(f"Warning: Could not apply filter/sort: {e}")
 
-        # Step 3: Extract products using Playwright DOM extraction
-        # (Nova Act's act_get hallucinates URLs, so we use page.evaluate instead)
-        log("Step 3: Extracting product listings via DOM...")
+        # Step 3: Wait for page to fully render, then extract
+        log("Step 3: Waiting for results to render...")
+        try:
+            page = nova.page
+            page.wait_for_load_state("networkidle", timeout=10000)
+            page.wait_for_selector('[data-component-type="s-search-result"]', timeout=10000)
+            page.wait_for_selector('.a-price', timeout=10000)
+            log("  Page loaded with price elements.")
+        except Exception as e:
+            log(f"  Warning: wait for selectors: {e}")
+
+        log("Step 4: Extracting product listings...")
+
         for round_num in range(MAX_SCROLL_ROUNDS):
             log(f"  Extraction round {round_num + 1}/{MAX_SCROLL_ROUNDS} "
                 f"(collected {len(all_products)} so far)...")
 
             try:
-                page = nova.page
 
                 raw_products = page.evaluate("""
                     () => {
@@ -246,17 +258,9 @@ def smart_search(query: str, headless: bool = True) -> list[dict]:
                     log(f"  Error scrolling: {e}")
                     break
 
-    # Filter: only keep products with 4+ star rating (or unknown rating)
-    before_filter = len(all_products)
-    all_products = [
-        p for p in all_products
-        if not p.rating or float(p.rating) >= 4.0
-    ]
-    if before_filter != len(all_products):
-        log(f"Rating filter: {before_filter} → {len(all_products)} (removed {before_filter - len(all_products)} below 4★)")
-
-    # Trim to target count
+    # Trim to target count (already sorted by Avg. Customer Review on Amazon)
     final_products = all_products[:TARGET_PRODUCT_COUNT]
+
     log(f"Search complete. Returning {len(final_products)} products.")
 
     return [p.model_dump() for p in final_products]

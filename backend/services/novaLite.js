@@ -378,4 +378,87 @@ IMPORTANT: Return ONLY valid JSON array, no additional text.`,
   }
 }
 
-module.exports = { analyzeProduct, classifyOutfit, hasPersonInImage, recommendItems };
+/**
+ * Classify a search query to determine if it's clothing, shoes, or other (accessories, etc.).
+ * Used to decide whether to append clothesSize, shoesSize, or nothing to the search query.
+ * Returns: "clothing" | "shoes" | "other"
+ */
+async function classifySearchQuery(query) {
+  try {
+    const response = await bedrockClient.send(new ConverseCommand({
+      modelId: "us.amazon.nova-2-lite-v1:0",
+      messages: [{
+        role: "user",
+        content: [{
+          text: `Classify this shopping search query into exactly one category. Reply with ONLY one word: "clothing", "shoes", or "other".
+
+- "clothing" = tops, bottoms, dresses, jackets, coats, shirts, pants, jeans, skirts, sweaters, hoodies, suits, swimwear, activewear, underwear, sleepwear
+- "shoes" = any footwear: shoes, sneakers, boots, sandals, heels, flats, loafers, slippers, pumps, moccasins
+- "other" = accessories, jewelry, bags, hats, scarves, sunglasses, watches, belts, wallets, cosmetics, makeup, perfume, or anything not clothing/shoes
+
+Query: "${query}"
+
+Category:`
+        }]
+      }],
+      inferenceConfig: { maxTokens: 10, temperature: 0 }
+    }));
+
+    const result = (response.output.message.content[0].text || "").toLowerCase().trim();
+    if (result.includes("clothing")) return "clothing";
+    if (result.includes("shoes")) return "shoes";
+    return "other";
+  } catch (err) {
+    console.error("[novaLite] classifySearchQuery error:", err.message);
+    return "clothing"; // fallback to clothing (most common search)
+  }
+}
+
+/**
+ * AI Router: classify a user's voice utterance to determine:
+ * 1. Which agent (stylist vs outfit_builder)
+ * 2. Whether it's a direct instruction or recommendation request
+ * Returns: { agent: "stylist"|"outfit_builder", isRecommendation: boolean }
+ */
+async function classifyVoiceIntent(transcript) {
+  try {
+    const response = await bedrockClient.send(new ConverseCommand({
+      modelId: "us.amazon.nova-2-lite-v1:0",
+      messages: [{
+        role: "user",
+        content: [{
+          text: `Classify this fashion request. Reply with EXACTLY two words separated by a space.
+
+First word — agent:
+"stylist" = ONE item (a dress, shoes, a jacket, one category)
+"outfit_builder" = COMPLETE outfit (multiple pieces, full look, top+bottom+shoes+accessories)
+
+Second word — intent:
+"direct" = user gives a direct instruction (find, search, show, get me, I want)
+"recommend" = user asks for advice/suggestion (recommend, suggest, what would look good, what do you think)
+
+Examples:
+"find me a white dress" → stylist direct
+"recommend me a dress" → stylist recommend
+"build me an outfit for a party" → outfit_builder recommend
+"I want a complete look with a blue top" → outfit_builder direct
+
+User said: "${transcript}"
+
+Answer:`
+        }]
+      }],
+      inferenceConfig: { maxTokens: 10, temperature: 0 }
+    }));
+
+    const result = (response.output.message.content[0].text || "").toLowerCase().trim();
+    const agent = result.includes("outfit_builder") ? "outfit_builder" : "stylist";
+    const isRecommendation = result.includes("recommend");
+    return { agent, isRecommendation };
+  } catch (err) {
+    console.error("[novaLite] classifyVoiceIntent error:", err.message);
+    return { agent: "stylist", isRecommendation: false };
+  }
+}
+
+module.exports = { analyzeProduct, classifyOutfit, hasPersonInImage, recommendItems, classifySearchQuery, classifyVoiceIntent };

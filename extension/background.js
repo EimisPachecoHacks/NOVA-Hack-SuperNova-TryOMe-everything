@@ -347,9 +347,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
 
         case "SMART_SEARCH": {
-          const result = await apiPost("/api/smart-search", {
-            query: message.query,
-          });
+          const searchBody = { query: message.query };
+          if (message.sex) searchBody.sex = message.sex;
+          if (message.clothesSize) searchBody.clothesSize = message.clothesSize;
+          if (message.shoesSize) searchBody.shoesSize = message.shoesSize;
+          const result = await apiPost("/api/smart-search", searchBody);
           sendResponse({ data: result });
           break;
         }

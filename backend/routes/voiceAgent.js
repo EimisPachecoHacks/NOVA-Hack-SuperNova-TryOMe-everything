@@ -25,11 +25,13 @@ Always respond in {{LANGUAGE}}. Tool arguments must always be in English.
 USER PROFILE: {{USER_PROFILE}}
 Use the user's sex to filter searches automatically. Never ask for sex or size.
 
-When a tool is working, say something brief like "On it!" and stop talking. After calling a tool, wait silently for the user to react. Never describe results you cannot see.
+Direct request ("find me X", "show me X"): call smart_search immediately. Say "on it".
+Recommendation ("recommend me X", "suggest X"): call suggest_item to describe what you recommend. After user confirms, call smart_search.
+Outfit ("outfit", "full look"): call delegate_to_outfit_builder.
 
-When the user asks "which one should I try?" or "what do you recommend?", use recommend_items. Include product_number when calling try_on. Use select_search_item when the user picks an item by number.
+After results load: use recommend_items when user asks "which looks best?". Use select_search_item when user picks by number.
 
-Only call a tool when the user explicitly asks. Never call tools on your own initiative.`;
+After calling any tool, stop talking and wait. Only call tools when the user asks.`;
 
 const OUTFIT_BUILDER_PROMPT = `You are Stella, a warm and stylish AI personal stylist helping build an outfit. Keep responses to 1-2 short sentences. Speak naturally and use the user's name.
 
@@ -46,6 +48,8 @@ FLOW:
 5. When user confirms try-on, call outfit_tryon. Wait silently.
 
 select_outfit_items: one category + one number per call. Categories: top, bottom, shoes, necklace, earrings, bracelets.
+
+If the user asks for a SINGLE item (a dress, shoes, a jacket) instead of an outfit, call delegate_to_stylist.
 
 After calling any tool, STOP talking and wait silently for the user.
 
@@ -74,7 +78,7 @@ const LANGUAGE_MAP = {
 const TOOL_DEFS = {
   smart_search: {
     name: "smart_search",
-    description: "Search Amazon for clothing items. Use when the user describes what they want.",
+    description: "Search Amazon. Use ONLY when the user gives a DIRECT instruction: 'find me', 'search for', 'show me', 'I want', 'get me'. Do NOT use when user says 'recommend' or 'suggest' — use suggest_item instead.",
     inputSchema: { json: JSON.stringify({ type: "object", properties: { query: { type: "string", description: "Search query for clothing items on Amazon" } }, required: ["query"] }) },
   },
   try_on: {
@@ -142,6 +146,21 @@ const TOOL_DEFS = {
     description: "Execute the pending outfit. Call only after user confirms.",
     inputSchema: { json: JSON.stringify({ type: "object", properties: { skip_missing: { type: "boolean", description: "True only if user explicitly declined missing categories" } }, required: [] }) },
   },
+  suggest_item: {
+    name: "suggest_item",
+    description: "Use when the user asks you to RECOMMEND, SUGGEST, or asks 'what would look good'. Call this INSTEAD of smart_search. Describe a specific item you recommend with color, material, and style.",
+    inputSchema: { json: JSON.stringify({ type: "object", properties: { description: { type: "string", description: "Your recommendation: specific color, material, style, and occasion" } }, required: ["description"] }) },
+  },
+  delegate_to_stylist: {
+    name: "delegate_to_stylist",
+    description: "When the user asks for a SINGLE item (a dress, shoes, a jacket) instead of a complete outfit. Use this to switch back to the stylist for individual item search or recommendation.",
+    inputSchema: { json: JSON.stringify({ type: "object", properties: { request: { type: "string", description: "What the user asked for" } }, required: ["request"] }) },
+  },
+  delegate_to_outfit_builder: {
+    name: "delegate_to_outfit_builder",
+    description: "ONLY when the user literally says the word 'outfit' or 'full look' or 'complete look'. Examples: 'build me an outfit', 'I want an outfit for a party', 'put together a full look'. Do NOT use for: 'recommend me a dress', 'find me shoes', 'suggest a jacket for a party' — those are single items, use smart_search or suggest_item instead.",
+    inputSchema: { json: JSON.stringify({ type: "object", properties: { request: { type: "string", description: "What the user asked for" } }, required: ["request"] }) },
+  },
 };
 
 // Stylist agent tools (search, try-on, actions)
@@ -149,7 +168,7 @@ const STYLIST_TOOLS = [
   TOOL_DEFS.smart_search, TOOL_DEFS.try_on, TOOL_DEFS.select_search_item,
   TOOL_DEFS.add_to_cart, TOOL_DEFS.save_favorite, TOOL_DEFS.save_video,
   TOOL_DEFS.animate_tryon, TOOL_DEFS.download, TOOL_DEFS.send_tryon,
-  TOOL_DEFS.recommend_items,
+  TOOL_DEFS.recommend_items, TOOL_DEFS.suggest_item, TOOL_DEFS.delegate_to_outfit_builder,
 ];
 
 // Outfit builder agent tools (outfit flow + shared actions)
@@ -158,38 +177,8 @@ const OUTFIT_BUILDER_TOOLS = [
   TOOL_DEFS.select_outfit_items, TOOL_DEFS.recommend_items,
   TOOL_DEFS.outfit_tryon, TOOL_DEFS.save_favorite, TOOL_DEFS.save_video,
   TOOL_DEFS.animate_tryon, TOOL_DEFS.download, TOOL_DEFS.send_tryon,
+  TOOL_DEFS.delegate_to_stylist,
 ];
-
-// ---------------------------------------------------------------------------
-// Intent detection — determines which agent should handle the user's request
-// ---------------------------------------------------------------------------
-const OUTFIT_KEYWORDS = ["outfit", "complete look", "full look", "put together", "build me", "whole outfit", "coordinate", "ensemble", "look completo", "arma un", "conjunto"];
-const CATEGORY_KEYWORDS = {
-  top: ["top", "shirt", "blouse", "t-shirt", "tee", "sweater", "hoodie", "jacket", "coat", "camisa", "blusa", "suéter", "chaqueta"],
-  bottom: ["pants", "jeans", "skirt", "shorts", "trousers", "leggings", "pantalón", "falda", "pantalones"],
-  shoes: ["shoes", "sneakers", "boots", "heels", "sandals", "loafers", "zapatos", "zapatillas", "botas", "tacones", "sandalias"],
-  necklace: ["necklace", "chain", "collar"],
-  earrings: ["earrings", "aretes", "pendientes"],
-  bracelets: ["bracelet", "bracelets", "bangle", "pulsera", "pulseras"],
-};
-
-function detectOutfitIntent(transcript) {
-  const text = (transcript || "").toLowerCase();
-
-  // Check explicit outfit keywords
-  for (const kw of OUTFIT_KEYWORDS) {
-    if (text.includes(kw)) return "outfit_builder";
-  }
-
-  // Check if 3+ distinct clothing categories mentioned
-  let categoryCount = 0;
-  for (const [, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    if (keywords.some((kw) => text.includes(kw))) categoryCount++;
-  }
-  if (categoryCount >= 3) return "outfit_builder";
-
-  return null;
-}
 
 // ---------------------------------------------------------------------------
 // Tool execution — calls back into the app's existing services
@@ -288,7 +277,7 @@ async function executeTool(toolName, argsJson, socket) {
       });
       return {
         status: "success",
-        message: `Search started for "${args.query}". Results are loading. Do NOT say anything else about the search — you already acknowledged it. Do NOT list, describe, or name any products. Do NOT call smart_search again. Stay silent and wait for the user to speak.`,
+        message: `Search started for "${args.query}". Results are NOW LOADING — they are NOT ready yet. Do NOT say "results are ready". Do NOT offer to recommend. Do NOT say anything else. Do NOT call any other tool. STOP talking completely and WAIT silently for the user to speak first.`,
         acknowledged: !!ack.acknowledged,
       };
     }
@@ -733,6 +722,38 @@ async function executeTool(toolName, argsJson, socket) {
       return { status: "error", message: "Unknown pending action type." };
     }
 
+    case "suggest_item": {
+      const description = args.description || "";
+      console.log(`[VoiceAgent] suggest_item — agent recommends: "${description}"`);
+      return {
+        status: "success",
+        message: `You just recommended: "${description}". Now say this recommendation out loud to the user and ask "Would you like me to search for this?" Then WAIT for the user to confirm before calling smart_search. Do NOT search yet.`,
+      };
+    }
+
+    case "delegate_to_stylist": {
+      const request = args.request || "find a single item";
+      console.log(`[VoiceAgent] delegate_to_stylist — switching agent. Request: "${request}"`);
+      const summary = `The user asked: "${request}". They want a single item, not an outfit.`;
+      setTimeout(() => socket._switchAgent && socket._switchAgent("stylist", summary), 500);
+      return {
+        status: "success",
+        message: `Switching to stylist mode. Tell the user "Sure, let me help you find that!" and stop talking.`,
+      };
+    }
+
+    case "delegate_to_outfit_builder": {
+      const request = args.request || "build a complete outfit";
+      console.log(`[VoiceAgent] delegate_to_outfit_builder — switching agent. Request: "${request}"`);
+      const summary = `The user asked: "${request}". They want a complete outfit. Recommend items for all 6 categories.`;
+      // Switch happens async — tell the stylist to inform the user
+      setTimeout(() => socket._switchAgent && socket._switchAgent("outfit_builder", summary), 500);
+      return {
+        status: "success",
+        message: `Switching to outfit builder mode. Tell the user "Let me help you build a complete outfit!" and stop talking. The outfit builder will take over.`,
+      };
+    }
+
     default:
       return { error: `Unknown tool: ${toolName}` };
   }
@@ -753,7 +774,6 @@ function setupVoiceAgent(io) {
     let idleTimer = null;
     let currentAgent = "stylist"; // "stylist" or "outfit_builder"
     let switchInProgress = false;
-    let switchDebounceTimer = null;
 
     function resetIdleTimer() {
       if (idleTimer) clearTimeout(idleTimer);
@@ -800,28 +820,8 @@ function setupVoiceAgent(io) {
         if (role === "USER" || role === "user") {
           socket._lastUserTranscript = (text || "").toLowerCase().trim();
 
-          // Intent detection — switch agents if needed
-          // Debounce: wait 2s after last utterance with outfit intent before switching,
-          // so partial sentences like "find a good outfit for..." don't kill the session mid-speech
-          if (!switchInProgress) {
-            const intent = detectOutfitIntent(text);
-            if (intent && intent !== currentAgent) {
-              const summary = intent === "outfit_builder"
-                ? "The user was browsing clothes and now wants to build a complete outfit."
-                : "The user finished with the outfit builder and wants to browse individual items.";
-              if (switchDebounceTimer) clearTimeout(switchDebounceTimer);
-              console.log(`[VoiceAgent] Intent detected: "${intent}" (current: "${currentAgent}") — debouncing 2s. Transcript: "${text}"`);
-              switchDebounceTimer = setTimeout(() => {
-                switchDebounceTimer = null;
-                switchAgent(intent, summary);
-              }, 2000);
-            } else if (switchDebounceTimer && !intent) {
-              // User said something without outfit intent — cancel pending switch
-              clearTimeout(switchDebounceTimer);
-              switchDebounceTimer = null;
-              console.log(`[VoiceAgent] Switch cancelled — subsequent utterance had no outfit intent.`);
-            }
-          }
+          // Agent routing handled by delegation tools (delegate_to_outfit_builder / delegate_to_stylist).
+          // No external router — the agent decides via tool calls.
         }
         // Clear the outfit confirmation gate when user actually speaks
         if ((role === "USER" || role === "user") && socket._awaitingOutfitConfirmation) {
@@ -895,6 +895,9 @@ function setupVoiceAgent(io) {
         switchInProgress = false;
       }
     }
+
+    // Expose switchAgent on socket so tool handlers can trigger it
+    socket._switchAgent = switchAgent;
 
     // --- Start a new voice session ---
     socket.on("startSession", async (config, ack) => {
@@ -1015,4 +1018,13 @@ function setupVoiceAgent(io) {
   console.log("[VoiceAgent] Socket.IO namespace /voice ready");
 }
 
-module.exports = { setupVoiceAgent };
+/**
+ * Cleanup all active voice sessions — called on graceful shutdown.
+ */
+function cleanupAllSessions() {
+  // io.of("/voice") sockets will be closed when io.close() is called in server.js
+  // This function is a hook for any additional cleanup if needed
+  console.log("[VoiceAgent] Cleaning up all sessions for shutdown");
+}
+
+module.exports = { setupVoiceAgent, cleanupAllSessions };

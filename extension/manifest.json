@@ -12,12 +12,7 @@
     "scripting"
   ],
   "host_permissions": [
-    "https://www.amazon.com/*",
-    "https://www.amazon.co.uk/*",
-    "https://*.shein.com/*",
-    "https://www.temu.com/*",
-    "https://shopping.google.com/*",
-    "https://www.google.com/*"
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js"
