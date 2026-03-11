@@ -8,7 +8,7 @@
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
-const BACKEND_URL = "http://98.91.240.78";
+const BACKEND_URL = "http://18.234.116.117";
 const INPUT_SAMPLE_RATE = 16000;
 const OUTPUT_SAMPLE_RATE = 24000;
 const CHUNK_SIZE = 512; // samples per audio processing frame
@@ -337,8 +337,16 @@ function setOrbState(state) {
   orb.className = "va-orb" + (state ? " " + state : "");
 }
 
+let _lastTranscriptRole = "";
+let _lastTranscriptText = "";
+
 function appendTranscript(role, text) {
   if (!text || !text.trim()) return;
+
+  // Deduplicate: Nova Sonic sends textOutput twice per response (text + audio transcription)
+  if (role === _lastTranscriptRole && text === _lastTranscriptText) return;
+  _lastTranscriptRole = role;
+  _lastTranscriptText = text;
 
   // Remove placeholder
   const placeholder = transcript.querySelector(".va-transcript-placeholder");

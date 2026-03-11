@@ -5,7 +5,7 @@
 
 const MAX_IMAGE_DIMENSION = 1024;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const DEFAULT_BACKEND_URL = 'http://98.91.240.78';
+const DEFAULT_BACKEND_URL = 'http://18.234.116.117';
 
 // State
 let pendingSignupEmail = '';
@@ -1675,7 +1675,7 @@ function initStella() {
   // Echo ducking: reduce mic gain while Stella speaks to prevent echo feedback
   // Barge-in still works because deliberate speech is much louder than echo
   const MIC_GAIN_NORMAL = 1.0;
-  const MIC_GAIN_DUCKED = 0.05; // aggressively suppress echo, loud barge-in still gets through
+  const MIC_GAIN_DUCKED = 0.05; // aggressive ducking to prevent echo hallucination
 
   const micBtn = document.getElementById('stellaMicBtn');
   const stopBtn = document.getElementById('stellaStopBtn');
@@ -1994,6 +1994,10 @@ function initStella() {
           // Same pattern as save_favorite: let wardrobe handle it directly (it has all the data)
           chrome.runtime.sendMessage({ type: 'VOICE_SAVE_VIDEO' });
           appendTranscript('system', 'Saving video...');
+          break;
+        case 'outfit_tryon':
+          chrome.runtime.sendMessage({ type: 'VOICE_OUTFIT_TRYON' });
+          appendTranscript('system', 'Generating outfit try-on...');
           break;
         case 'animate_tryon': {
           const traceId = 'anim_' + Date.now();

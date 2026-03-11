@@ -16,6 +16,7 @@ const jwt = require("jsonwebtoken");
 
 // ---------------------------------------------------------------------------
 // System prompts — two short focused prompts for each agent mode
+// Nova Sonic 2 has strict token limits — NEVER merge these into one prompt
 // ---------------------------------------------------------------------------
 const STYLIST_PROMPT = `You are Stella, a warm and stylish AI personal stylist. Keep responses to 1-2 short sentences. Speak naturally and use the user's name.
 
@@ -26,7 +27,9 @@ Use the user's sex to filter searches automatically. Never ask for sex or size.
 
 When a tool is working, say something brief like "On it!" and stop talking. After calling a tool, wait silently for the user to react. Never describe results you cannot see.
 
-Only call a tool when the user explicitly asks for that action. Never call tools on your own initiative.`;
+When the user asks "which one should I try?" or "what do you recommend?", use recommend_items. Include product_number when calling try_on. Use select_search_item when the user picks an item by number.
+
+Only call a tool when the user explicitly asks. Never call tools on your own initiative.`;
 
 const OUTFIT_BUILDER_PROMPT = `You are Stella, a warm and stylish AI personal stylist helping build an outfit. Keep responses to 1-2 short sentences. Speak naturally and use the user's name.
 
@@ -35,11 +38,16 @@ Always respond in {{LANGUAGE}}. Tool arguments must always be in English.
 USER PROFILE: {{USER_PROFILE}}
 Use the user's sex to filter searches automatically. Never ask for sex or size.
 
-build_outfit notes items but does not execute. Ask the user if they want to add more. Call confirm_outfit only after the user confirms. If the user says "you choose" or "surprise me", fill all 6 categories yourself.
+FLOW:
+1. Say "I recommend..." and describe all 6 items (top, bottom, shoes, necklace, earrings, bracelets) with specific searchable descriptions (color + material + style). Then ask "Would you like to go with this selection or make any changes?"
+2. When user confirms, say "generating your outfit now" and call build_outfit with all 6 items. Then STOP talking and wait silently.
+3. Do NOT say "your look is ready" or "outfit is ready" until AFTER the user speaks again. The wardrobe needs time to load.
+4. When user asks which items look best, call recommend_items. Then select each with select_outfit_items (one call per category). Ask "Would you like to see how these look on you?"
+5. When user confirms try-on, call outfit_tryon. Wait silently.
 
-select_outfit_items takes one category and one number per call. Categories: top, bottom, shoes, necklace, earrings, bracelets.
+select_outfit_items: one category + one number per call. Categories: top, bottom, shoes, necklace, earrings, bracelets.
 
-Only call a tool when the user explicitly asks. After calling a tool, wait silently for the user.
+After calling any tool, STOP talking and wait silently for the user.
 
 {{CONTEXT_SUMMARY}}`;
 
@@ -94,6 +102,11 @@ const TOOL_DEFS = {
     description: "Save the current animation/video.",
     inputSchema: { json: JSON.stringify({ type: "object", properties: {}, required: [] }) },
   },
+  outfit_tryon: {
+    name: "outfit_tryon",
+    description: "Trigger the virtual try-on for the outfit builder wardrobe. PREREQUISITES: (1) confirm_outfit must have been called first to open the wardrobe, (2) items must have been selected via select_outfit_items, (3) user must explicitly confirm they want to try on. NEVER call this right after build_outfit — the wardrobe must be open with items selected first.",
+    inputSchema: { json: JSON.stringify({ type: "object", properties: {}, required: [] }) },
+  },
   animate_tryon: {
     name: "animate_tryon",
     description: "Generate a video animation from the try-on result. Only when user asks for animation.",
@@ -139,10 +152,12 @@ const STYLIST_TOOLS = [
   TOOL_DEFS.recommend_items,
 ];
 
-// Outfit builder agent tools (outfit flow only)
+// Outfit builder agent tools (outfit flow + shared actions)
 const OUTFIT_BUILDER_TOOLS = [
   TOOL_DEFS.build_outfit, TOOL_DEFS.confirm_outfit,
   TOOL_DEFS.select_outfit_items, TOOL_DEFS.recommend_items,
+  TOOL_DEFS.outfit_tryon, TOOL_DEFS.save_favorite, TOOL_DEFS.save_video,
+  TOOL_DEFS.animate_tryon, TOOL_DEFS.download, TOOL_DEFS.send_tryon,
 ];
 
 // ---------------------------------------------------------------------------
@@ -364,9 +379,29 @@ async function executeTool(toolName, argsJson, socket) {
       if (!pending.args.earrings) missing.push("earrings");
       if (!pending.args.bracelets) missing.push("bracelets");
 
-      const missingMsg = missing.length > 0
-        ? ` Still missing: ${missing.join(", ")}. Ask the user about these categories, especially accessories (necklace, earrings, bracelets).`
-        : " All 6 categories are filled.";
+      // All 6 categories filled in one call → user already confirmed, auto-execute
+      if (missing.length === 0) {
+        console.log(`[VoiceAgent] build_outfit: all 6 categories filled — auto-executing (opening wardrobe)`);
+        socket._pendingOutfitAction = null;
+        socket._wardrobeOpen = true;
+        socket._awaitingOutfitConfirmation = false;
+        const ack = await emitAndWaitForAck(socket, {
+          action: "build_outfit",
+          top: pending.args.top,
+          bottom: pending.args.bottom,
+          shoes: pending.args.shoes,
+          necklace: pending.args.necklace,
+          earrings: pending.args.earrings,
+          bracelets: pending.args.bracelets,
+        });
+        return {
+          status: "success",
+          message: `Opening the Outfit Builder with: ${parts.join(", ")}. The wardrobe is searching Amazon and will display NUMBERED items in each category. Wait silently for items to load. When the user asks which items look best, call recommend_items, then select each with select_outfit_items.`,
+          acknowledged: !!ack.acknowledged,
+        };
+      }
+
+      const missingMsg = ` Still missing: ${missing.join(", ")}. Ask the user about these categories, especially accessories (necklace, earrings, bracelets).`;
 
       return {
         status: "success",
@@ -412,6 +447,24 @@ async function executeTool(toolName, argsJson, socket) {
       return {
         status: "success",
         message: "Saving the video to your collection.",
+        acknowledged: !!ack.acknowledged,
+      };
+    }
+
+    case "outfit_tryon": {
+      // Code-level guard: only allow if the wardrobe is open (confirm_outfit was called)
+      if (!socket._wardrobeOpen) {
+        console.log(`[VoiceAgent] outfit_tryon BLOCKED — wardrobe is not open yet. Must call confirm_outfit first.`);
+        return {
+          status: "error",
+          message: "The wardrobe is not open yet. You must call confirm_outfit first to open the Outfit Builder, wait for items to load, then let the user select items with select_outfit_items. Only AFTER items are selected can you call outfit_tryon.",
+        };
+      }
+      console.log(`[VoiceAgent] outfit_tryon — triggering virtual try-on in wardrobe`);
+      const ack = await emitAndWaitForAck(socket, { action: "outfit_tryon" });
+      return {
+        status: "in_progress",
+        message: "The outfit try-on is NOW GENERATING — it is NOT finished yet. Tell the user it's generating and STOP talking. Do NOT say it is ready. Do NOT describe the result. WAIT silently for the user to speak first.",
         acknowledged: !!ack.acknowledged,
       };
     }
@@ -606,7 +659,7 @@ async function executeTool(toolName, argsJson, socket) {
 
       return {
         status: "success",
-        message: `Selected ${cat} #${num} in the outfit builder. The item is now highlighted in the wardrobe. IMPORTANT: The wardrobe AUTOMATICALLY triggers the virtual try-on once all 6 categories are selected — do NOT ask the user if they want to try on and do NOT call try_on yourself. Just let them know items are being selected.`,
+        message: `Selected ${cat} #${num} in the outfit builder. The item is now highlighted in the wardrobe. Once all items are selected, ask the user "Would you like to see how these items look on you?" and wait for their response. When they confirm, call outfit_tryon. Do NOT assume try-on happens automatically — you must call outfit_tryon explicitly.`,
       };
     }
 
@@ -652,6 +705,7 @@ async function executeTool(toolName, argsJson, socket) {
 
       if (pendingAction.type === "build_outfit") {
         console.log(`[VoiceAgent] confirm_outfit executing build_outfit:`, JSON.stringify(pendingAction.args));
+        socket._wardrobeOpen = true; // Wardrobe is now open — outfit_tryon allowed
         const ack = await emitAndWaitForAck(socket, {
           action: "build_outfit",
           top: pendingAction.args.top || null,
@@ -697,6 +751,9 @@ function setupVoiceAgent(io) {
 
     let session = null;
     let idleTimer = null;
+    let currentAgent = "stylist"; // "stylist" or "outfit_builder"
+    let switchInProgress = false;
+    let switchDebounceTimer = null;
 
     function resetIdleTimer() {
       if (idleTimer) clearTimeout(idleTimer);
@@ -713,10 +770,6 @@ function setupVoiceAgent(io) {
     function clearIdleTimer() {
       if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
     }
-
-    // --- Dual agent state ---
-    let currentAgent = "stylist"; // "stylist" or "outfit_builder"
-    let switchInProgress = false;
 
     /**
      * Build a localized prompt for the given agent type using stored socket config.
@@ -748,14 +801,25 @@ function setupVoiceAgent(io) {
           socket._lastUserTranscript = (text || "").toLowerCase().trim();
 
           // Intent detection — switch agents if needed
+          // Debounce: wait 2s after last utterance with outfit intent before switching,
+          // so partial sentences like "find a good outfit for..." don't kill the session mid-speech
           if (!switchInProgress) {
             const intent = detectOutfitIntent(text);
             if (intent && intent !== currentAgent) {
               const summary = intent === "outfit_builder"
                 ? "The user was browsing clothes and now wants to build a complete outfit."
                 : "The user finished with the outfit builder and wants to browse individual items.";
-              console.log(`[VoiceAgent] Intent detected: "${intent}" (current: "${currentAgent}") — switching. Transcript: "${text}"`);
-              setTimeout(() => switchAgent(intent, summary), 150);
+              if (switchDebounceTimer) clearTimeout(switchDebounceTimer);
+              console.log(`[VoiceAgent] Intent detected: "${intent}" (current: "${currentAgent}") — debouncing 2s. Transcript: "${text}"`);
+              switchDebounceTimer = setTimeout(() => {
+                switchDebounceTimer = null;
+                switchAgent(intent, summary);
+              }, 2000);
+            } else if (switchDebounceTimer && !intent) {
+              // User said something without outfit intent — cancel pending switch
+              clearTimeout(switchDebounceTimer);
+              switchDebounceTimer = null;
+              console.log(`[VoiceAgent] Switch cancelled — subsequent utterance had no outfit intent.`);
             }
           }
         }
@@ -843,7 +907,6 @@ function setupVoiceAgent(io) {
         const langCode = config?.language || "en";
         const langName = LANGUAGE_MAP[langCode] || "English";
 
-        // Store voice config on socket for agent switching
         socket._voiceId = voiceId;
         socket._voiceLangCode = langCode;
         socket._voiceLangName = langName;
@@ -868,6 +931,7 @@ function setupVoiceAgent(io) {
         socket._pendingOutfitAction = null;
         socket._awaitingOutfitConfirmation = false;
         socket._outfitGateSetAt = 0;
+        socket._wardrobeOpen = false;
 
         // Build user profile string and store on socket
         const profileParts = [];
@@ -879,14 +943,13 @@ function setupVoiceAgent(io) {
           ? profileParts.join(", ")
           : "No profile information available";
 
-        // Default to Stylist agent
         currentAgent = "stylist";
         const prompt = buildPrompt("stylist");
         session = new SonicSession(prompt, STYLIST_TOOLS, voiceId);
         wireSessionCallbacks();
 
         await session.start();
-        console.log(`[VoiceAgent] Session started (stylist) for ${socket.id}`);
+        console.log(`[VoiceAgent] Session started for ${socket.id}`);
         resetIdleTimer();
 
         if (typeof ack === "function") ack({ status: "ok" });

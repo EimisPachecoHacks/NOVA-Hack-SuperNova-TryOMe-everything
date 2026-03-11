@@ -5,7 +5,7 @@
  * Handles auth token injection for all API calls.
  */
 
-const DEFAULT_BACKEND_URL = "http://98.91.240.78:3000";
+const DEFAULT_BACKEND_URL = "http://18.234.116.117:3000";
 
 async function getBackendUrl() {
   return new Promise((resolve) => {
@@ -608,6 +608,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
               earringsNumber: message.earringsNumber,
               braceletsNumber: message.braceletsNumber,
             });
+          }
+          sendResponse({ data: { status: "ok" } });
+          break;
+        }
+
+        case "VOICE_OUTFIT_TRYON": {
+          const allTabs3 = await chrome.tabs.query({});
+          const wardrobeTab = allTabs3
+            .filter(t => t.url && t.url.includes("outfit-builder/wardrobe.html"))
+            .sort((a, b) => b.id - a.id)[0];
+          if (wardrobeTab) {
+            chrome.tabs.sendMessage(wardrobeTab.id, { type: "VOICE_OUTFIT_TRYON" });
+            console.log("[background] VOICE_OUTFIT_TRYON forwarded to wardrobe tab", wardrobeTab.id);
+          } else {
+            console.warn("[background] VOICE_OUTFIT_TRYON — no wardrobe tab found");
           }
           sendResponse({ data: { status: "ok" } });
           break;

@@ -94,12 +94,18 @@ initWardrobe();
 async function initWardrobe() {
   startTimer();
 
-  const promises = [];
+  // Show accessory loading indicators immediately (before Wave 1) so user sees all 6 categories
+  if (necklaceQuery) document.getElementById("loadingNecklace").hidden = false;
+  if (earringsQuery) document.getElementById("loadingEarrings").hidden = false;
+  if (braceletsQuery) document.getElementById("loadingBracelets").hidden = false;
+
+  // All 6 categories in parallel — t3.medium 4GB RAM + 2GB swap (6GB total) handles 6 Nova Act processes
+  const allSearches = [];
 
   if (topQuery) {
     const topSizeStr = clothesSizeParam ? ` size ${clothesSizeParam}` : "";
     const tq = /top|shirt|blouse|sweater|jacket|hoodie|t-shirt|tee|tank|polo|coat|blazer|cardigan|vest|tunic|crop/i.test(topQuery) ? topQuery : `${topQuery} top`;
-    promises.push(searchCategory("top", `${tq} ${sexSuffix}${topSizeStr}`));
+    allSearches.push(searchCategory("top", `${tq} ${sexSuffix}${topSizeStr}`));
   } else {
     updateCategoryStatus("top", "Skipped");
   }
@@ -107,7 +113,7 @@ async function initWardrobe() {
   if (bottomQuery) {
     const bottomSizeStr = clothesSizeParam ? ` size ${clothesSizeParam}` : "";
     const bq = /bottom|pants|jeans|shorts|skirt|trousers|leggings|joggers|chinos|slacks|capri/i.test(bottomQuery) ? bottomQuery : `${bottomQuery} pants`;
-    promises.push(searchCategory("bottom", `${bq} ${sexSuffix}${bottomSizeStr}`));
+    allSearches.push(searchCategory("bottom", `${bq} ${sexSuffix}${bottomSizeStr}`));
   } else {
     updateCategoryStatus("bottom", "Skipped");
   }
@@ -115,33 +121,29 @@ async function initWardrobe() {
   if (shoesQuery) {
     const shoesSizeStr = shoesSizeParam ? ` size ${shoesSizeParam}` : "";
     const sq = /shoes?|sneakers?|boots?|sandals?|heels?|flats?|loafers?|moccasins?|slippers?|pumps?|oxfords?/i.test(shoesQuery) ? shoesQuery : `${shoesQuery} shoes`;
-    promises.push(searchCategory("shoes", `${sq} ${sexSuffix}${shoesSizeStr}`));
+    allSearches.push(searchCategory("shoes", `${sq} ${sexSuffix}${shoesSizeStr}`));
   } else {
     updateCategoryStatus("shoes", "Skipped");
   }
 
-  // Accessories (optional) — auto-prepend category name if not already in query
-  const hasAccessories = necklaceQuery || earringsQuery || braceletsQuery;
   if (necklaceQuery) {
-    document.getElementById("loadingNecklace").hidden = false;
     const nq = /necklace/i.test(necklaceQuery) ? necklaceQuery : `${necklaceQuery} necklace`;
-    promises.push(searchCategory("necklace", `${nq} ${sexSuffix}`));
+    allSearches.push(searchCategory("necklace", `${nq} ${sexSuffix}`));
   }
   if (earringsQuery) {
-    document.getElementById("loadingEarrings").hidden = false;
     const eq = /earrings?/i.test(earringsQuery) ? earringsQuery : `${earringsQuery} earrings`;
-    promises.push(searchCategory("earrings", `${eq} ${sexSuffix}`));
+    allSearches.push(searchCategory("earrings", `${eq} ${sexSuffix}`));
   }
   if (braceletsQuery) {
-    document.getElementById("loadingBracelets").hidden = false;
     const bq = /bracelets?/i.test(braceletsQuery) ? braceletsQuery : `${braceletsQuery} bracelet`;
-    promises.push(searchCategory("bracelets", `${bq} ${sexSuffix}`));
+    allSearches.push(searchCategory("bracelets", `${bq} ${sexSuffix}`));
   }
 
-  // Fetch user photo in parallel
-  promises.push(loadUserPhoto());
+  // Fetch user photo in parallel (lightweight, no Nova Act)
+  allSearches.push(loadUserPhoto());
 
-  await Promise.allSettled(promises);
+  await Promise.allSettled(allSearches);
+  console.log(`[Wardrobe] All 6 searches complete — ${((Date.now() - searchStartTime) / 1000).toFixed(1)}s elapsed`);
 
   stopTimer();
   showWardrobe();
@@ -175,7 +177,9 @@ async function initWardrobe() {
 }
 
 async function searchCategory(category, query) {
+  const catStart = Date.now();
   updateCategoryStatus(category, "Searching...");
+  console.log(`[Wardrobe] ${category}: starting search for "${query}"`);
 
   try {
     const result = await sendMessage({
@@ -183,15 +187,17 @@ async function searchCategory(category, query) {
       query: query,
     });
 
+    const searchTime = ((Date.now() - catStart) / 1000).toFixed(1);
+
     if (!result || result.error) {
       updateCategoryStatus(category, "Failed");
-      console.error(`[Wardrobe] ${category} search failed:`, result?.error);
+      console.error(`[Wardrobe] ${category} search failed (${searchTime}s):`, result?.error);
       return;
     }
 
     const products = result.products || [];
     updateCategoryStatus(category, products.length + " found, removing backgrounds...");
-    console.log(`[Wardrobe] ${category}: ${products.length} products found`);
+    console.log(`[Wardrobe] ${category}: ${products.length} products found (${searchTime}s)`);
 
     // Tag each product with its category
     products.forEach((p) => {
@@ -251,12 +257,14 @@ async function searchCategory(category, query) {
       }));
       updateCategoryStatus(category, `${bgSuccessCount}/${items.length} backgrounds removed...`);
     }
-    console.log(`[Wardrobe] ${category}: ${bgSuccessCount}/${items.length} backgrounds successfully removed`);
+    const bgTime = ((Date.now() - catStart) / 1000).toFixed(1);
+    console.log(`[Wardrobe] ${category}: ${bgSuccessCount}/${items.length} backgrounds removed, total ${bgTime}s`);
 
     updateCategoryStatus(category, products.length + " ready");
     renderCategory(category, products);
   } catch (err) {
-    console.error(`[Wardrobe] ${category} search error:`, err);
+    const errTime = ((Date.now() - catStart) / 1000).toFixed(1);
+    console.error(`[Wardrobe] ${category} search error (${errTime}s):`, err);
     updateCategoryStatus(category, "Error");
   }
 }
@@ -663,9 +671,19 @@ async function handleTryOn() {
 
   } catch (err) {
     stopTryOnTimer();
-    console.error("[Wardrobe] Try-on failed:", err);
-    console.error("[Wardrobe] Error details:", err.message, err.stack);
-    updateTryOnStatus("Failed: " + err.message);
+    const errMsg = err.message || String(err);
+    let userFriendlyMsg = errMsg;
+    if (errMsg.includes("503") || errMsg.includes("UNAVAILABLE") || errMsg.includes("high demand")) {
+      userFriendlyMsg = "Gemini AI is temporarily overloaded. Please try again in a moment.";
+      console.error("[Wardrobe] Try-on failed: Gemini API 503 — model overloaded");
+    } else if (errMsg.includes("500")) {
+      userFriendlyMsg = "Server error during try-on. Please try again.";
+      console.error("[Wardrobe] Try-on failed: Server error 500");
+    } else {
+      console.error("[Wardrobe] Try-on failed:", errMsg);
+    }
+    console.error("[Wardrobe] Full error:", err.message, err.stack);
+    updateTryOnStatus(userFriendlyMsg);
     // Show error for 5s then restore
     setTimeout(() => {
       hideTryOnLoading();
@@ -1141,23 +1159,25 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.earringsNumber) selectByNumber("earringsContainer", message.earringsNumber, "earrings");
     if (message.braceletsNumber) selectByNumber("braceletsContainer", message.braceletsNumber, "bracelets");
 
-    // Debounced try-on: reset timer on each call so multiple calls accumulate
-    // selections before triggering try-on (e.g., clothes first, accessories second)
-    // Voice flow requires ALL 6 categories before triggering try-on
-    if (_voiceSelectTryOnTimer) clearTimeout(_voiceSelectTryOnTimer);
-    _voiceSelectTryOnTimer = setTimeout(() => {
-      _voiceSelectTryOnTimer = null;
-      const allSelected = selectedTop && selectedBottom && selectedShoes && selectedNecklace && selectedEarrings && selectedBracelet;
-      if (allSelected) {
-        handleTryOn();
-      } else {
-        console.log("[Wardrobe] Voice try-on waiting — not all 6 categories selected yet.",
-          "top:", !!selectedTop, "bottom:", !!selectedBottom, "shoes:", !!selectedShoes,
-          "necklace:", !!selectedNecklace, "earrings:", !!selectedEarrings, "bracelet:", !!selectedBracelet);
-      }
-    }, 5000);
+    // Do NOT auto-trigger try-on — let the voice agent ask the user for confirmation first.
+    // The agent will send VOICE_CLICK_TRY_ON when the user confirms.
+    const allSelected = selectedTop && selectedBottom && selectedShoes && selectedNecklace && selectedEarrings && selectedBracelet;
+    if (allSelected) {
+      console.log("[Wardrobe] All 6 categories selected — waiting for user confirmation via voice agent.");
+    } else {
+      console.log("[Wardrobe] Voice selection update — not all 6 yet.",
+        "top:", !!selectedTop, "bottom:", !!selectedBottom, "shoes:", !!selectedShoes,
+        "necklace:", !!selectedNecklace, "earrings:", !!selectedEarrings, "bracelet:", !!selectedBracelet);
+    }
 
     sendResponse({ status: "ok" });
+  }
+
+  // Voice-triggered outfit try-on
+  if (message.type === "VOICE_OUTFIT_TRYON") {
+    console.log("[Wardrobe] Voice outfit try-on triggered");
+    handleTryOn();
+    sendResponse({ status: "ok", action: "outfit_tryon" });
   }
 
   // Voice-triggered animate

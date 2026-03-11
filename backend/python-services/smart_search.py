@@ -57,10 +57,8 @@ def smart_search(query: str, headless: bool = True) -> list[dict]:
     all_products: list[Product] = []
     seen_titles: set[str] = set()
 
-    api_key = os.environ.get("NOVA_ACT_API_KEY", "NOT SET")
     log(f"Starting smart search for: {query}")
     log(f"Headless mode: {headless}")
-    log(f"NOVA_ACT_API_KEY: {api_key[:8]}...{api_key[-4:] if len(api_key) > 12 else api_key}")
 
     with NovaAct(
         starting_page=AMAZON_URL,
@@ -150,34 +148,41 @@ def smart_search(query: str, headless: bool = True) -> list[dict]:
                                     }
                                 }
 
-                                // Price: Amazon's grid view often doesn't show price
-                                // Try multiple selectors
+                                // Price: try multiple selectors
                                 let price = '';
-                                const priceSpan = item.querySelector('.a-price .a-offscreen');
-                                if (priceSpan) {
-                                    price = priceSpan.textContent.trim();
+                                const priceOffscreen = item.querySelector('.a-price .a-offscreen');
+                                if (priceOffscreen) {
+                                    price = priceOffscreen.textContent.trim();
+                                }
+                                if (!price) {
+                                    const priceWhole = item.querySelector('.a-price .a-price-whole');
+                                    const priceFrac = item.querySelector('.a-price .a-price-fraction');
+                                    if (priceWhole) {
+                                        price = '$' + priceWhole.textContent.replace(/[^0-9,]/g, '');
+                                        if (priceFrac) price += priceFrac.textContent.trim();
+                                    }
+                                }
+                                if (!price) {
+                                    const priceRange = item.querySelector('.a-price-range .a-offscreen');
+                                    if (priceRange) price = priceRange.textContent.trim();
                                 }
 
                                 // Rating: try multiple selectors
                                 let rating = '';
-                                const ratingEl = item.querySelector('[aria-label*="out of 5"]')
-                                    || item.querySelector('i[class*="a-star"] + span.a-size-base')
-                                    || item.querySelector('.a-icon-star-small');
-                                if (ratingEl) {
-                                    const ariaLabel = ratingEl.getAttribute('aria-label') || '';
-                                    const cls = ratingEl.className || '';
-                                    const m = ariaLabel.match(/([\d.]+)/) || cls.match(/a-star-(?:small-)?([\d]-[\d])/);
-                                    if (m) {
-                                        rating = m[1].replace('-', '.');
-                                    }
+                                // 1. Standard: span or i with "X out of 5 stars" aria-label
+                                const allAriaEls = item.querySelectorAll('[aria-label]');
+                                for (const el of allAriaEls) {
+                                    const al = el.getAttribute('aria-label') || '';
+                                    const rm = al.match(/([\d.]+)\s*out\s*of\s*5/);
+                                    if (rm) { rating = rm[1]; break; }
                                 }
-                                // Fallback: look for rating text anywhere in the item
+                                // 2. Star icon class: a-star-small-4-5 or a-star-4-5
                                 if (!rating) {
-                                    const allSpans = item.querySelectorAll('span[aria-label]');
-                                    for (const sp of allSpans) {
-                                        const al = sp.getAttribute('aria-label') || '';
-                                        const rm = al.match(/([\d.]+)\s*out\s*of\s*5/);
-                                        if (rm) { rating = rm[1]; break; }
+                                    const starIcon = item.querySelector('i[class*="a-star"]');
+                                    if (starIcon) {
+                                        const cls = starIcon.className || '';
+                                        const cm = cls.match(/a-star-(?:small-)?([\d])(?:-([\d]))?/);
+                                        if (cm) rating = cm[1] + (cm[2] ? '.' + cm[2] : '');
                                     }
                                 }
 

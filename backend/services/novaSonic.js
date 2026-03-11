@@ -432,7 +432,14 @@ class SonicSession {
           if (evt.audioOutput && this.onAudioOutput) {
             this.onAudioOutput(evt.audioOutput.content);
           } else if (evt.textOutput && this.onTextOutput) {
-            this.onTextOutput(evt.textOutput.content, evt.textOutput.role);
+            // Nova Sonic sends SPECULATIVE (planned) + FINAL (actual spoken) text.
+            // Only emit FINAL to avoid duplicate transcriptions.
+            const stage = evt.textOutput.generationStage;
+            if (stage && stage === "SPECULATIVE") {
+              // Skip speculative text — wait for FINAL
+            } else {
+              this.onTextOutput(evt.textOutput.content, evt.textOutput.role);
+            }
           } else if (evt.toolUse && this.onToolUse) {
             this.onToolUse(
               evt.toolUse.toolName,

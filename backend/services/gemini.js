@@ -146,39 +146,53 @@ async function virtualTryOn(sourceImageBase64, referenceImageBase64, garmentClas
   console.log(`\x1b[34m  │ model:\x1b[0m        \x1b[1m${modelId}\x1b[0m`);
   console.log(`\x1b[34m  └─── CALLING GEMINI API... ───┘\x1b[0m`);
 
-  const MAX_ATTEMPTS = 2;
+  const MAX_ATTEMPTS = 3;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const geminiCallStart = Date.now();
     console.log(`\x1b[34m  ⏱ GEMINI API call attempt ${attempt} starting...\x1b[0m`);
-    const response = await client.models.generateContent({
-      model: modelId,
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { text: "This is the person. Keep this EXACT person — same face, skin, body, hair, and EXACT SAME POSE (body angle, arm position, stance):" },
-            {
-              inlineData: {
-                mimeType: "image/jpeg",
-                data: sourceImageBase64,
+
+    let response;
+    try {
+      response = await client.models.generateContent({
+        model: modelId,
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: "This is the person. Keep this EXACT person — same face, skin, body, hair, and EXACT SAME POSE (body angle, arm position, stance):" },
+              {
+                inlineData: {
+                  mimeType: "image/jpeg",
+                  data: sourceImageBase64,
+                },
               },
-            },
-            { text: "This is the garment to put on the person above:" },
-            {
-              inlineData: {
-                mimeType: "image/jpeg",
-                data: referenceImageBase64,
+              { text: "This is the garment to put on the person above:" },
+              {
+                inlineData: {
+                  mimeType: "image/jpeg",
+                  data: referenceImageBase64,
+                },
               },
-            },
-            { text: attempt === 1 ? prompt : `CRITICAL: You MUST change the person's clothing. The person in IMAGE 1 is currently wearing different clothes — you MUST replace their current outfit with the garment shown in IMAGE 2. Do NOT return the person in their original clothing. The output image MUST show the person wearing the NEW garment.\n\n${prompt}` },
-          ],
+              { text: attempt === 1 ? prompt : `CRITICAL: You MUST change the person's clothing. The person in IMAGE 1 is currently wearing different clothes — you MUST replace their current outfit with the garment shown in IMAGE 2. Do NOT return the person in their original clothing. The output image MUST show the person wearing the NEW garment.\n\n${prompt}` },
+            ],
+          },
+        ],
+        config: {
+          responseModalities: ["TEXT", "IMAGE"],
+          systemInstruction: "You are a virtual clothing try-on system. You will receive exactly 2 images: IMAGE 1 is a real person (the customer), IMAGE 2 is a garment. Your ONLY job is to produce a single photo-realistic image of the EXACT same person from IMAGE 1 wearing the garment from IMAGE 2. IDENTITY RULE: The output person must have the IDENTICAL face, facial bone structure, nose, eyes, eyebrows, lips, skin color, hair color, hair style, and body proportions as IMAGE 1. Do NOT replace them with a model, do NOT alter their facial features, do NOT change their skin tone. If you cannot preserve the identity perfectly, try harder — identity fidelity is the #1 priority, above all else.",
         },
-      ],
-      config: {
-        responseModalities: ["TEXT", "IMAGE"],
-        systemInstruction: "You are a virtual clothing try-on system. You will receive exactly 2 images: IMAGE 1 is a real person (the customer), IMAGE 2 is a garment. Your ONLY job is to produce a single photo-realistic image of the EXACT same person from IMAGE 1 wearing the garment from IMAGE 2. IDENTITY RULE: The output person must have the IDENTICAL face, facial bone structure, nose, eyes, eyebrows, lips, skin color, hair color, hair style, and body proportions as IMAGE 1. Do NOT replace them with a model, do NOT alter their facial features, do NOT change their skin tone. If you cannot preserve the identity perfectly, try harder — identity fidelity is the #1 priority, above all else.",
-      },
-    });
+      });
+    } catch (err) {
+      const msg = (err.message || "") + (err.status || "");
+      const isTransient = /503|429|UNAVAILABLE|high demand|overloaded|rate.?limit/i.test(msg);
+      const geminiCallTime = ((Date.now() - geminiCallStart) / 1000).toFixed(1);
+      if (isTransient && attempt < MAX_ATTEMPTS) {
+        console.log(`\x1b[33m  ⟳ GEMINI attempt ${attempt} transient error (${geminiCallTime}s): ${err.message} — retrying in 3s...\x1b[0m`);
+        await new Promise(r => setTimeout(r, 3000));
+        continue;
+      }
+      throw err;
+    }
 
     const geminiCallTime = ((Date.now() - geminiCallStart) / 1000).toFixed(1);
 
@@ -246,37 +260,63 @@ CRITICAL RULES:
 - The ${isSet ? "outfit pieces" : "garment"} should fill most of the frame
 - Photorealistic result. Output only the resulting image.`;
 
-  const response = await client.models.generateContent({
-    model: "gemini-3.1-flash-image-preview",
-    contents: [
-      {
-        role: "user",
-        parts: [
-          { text: prompt },
+  const MAX_EXTRACT_ATTEMPTS = 3;
+  for (let attempt = 1; attempt <= MAX_EXTRACT_ATTEMPTS; attempt++) {
+    let response;
+    try {
+      response = await client.models.generateContent({
+        model: "gemini-3.1-flash-image-preview",
+        contents: [
           {
-            inlineData: {
-              mimeType: "image/jpeg",
-              data: imageBase64,
-            },
+            role: "user",
+            parts: [
+              { text: prompt },
+              {
+                inlineData: {
+                  mimeType: "image/jpeg",
+                  data: imageBase64,
+                },
+              },
+            ],
           },
         ],
-      },
-    ],
-    config: {
-      responseModalities: ["TEXT", "IMAGE"],
-    },
-  });
+        config: {
+          responseModalities: ["TEXT", "IMAGE"],
+        },
+      });
+    } catch (err) {
+      const msg = (err.message || "") + (err.status || "");
+      const isTransient = /503|429|UNAVAILABLE|high demand|overloaded|rate.?limit/i.test(msg);
+      if (isTransient && attempt < MAX_EXTRACT_ATTEMPTS) {
+        console.log(`[gemini] extractGarment attempt ${attempt} transient error: ${err.message} — retrying in 3s...`);
+        await new Promise(r => setTimeout(r, 3000));
+        continue;
+      }
+      throw err;
+    }
 
-  const candidates = response.candidates || [];
-  if (!candidates.length) {
-    throw new Error("No response from Gemini for garment extraction");
-  }
+    const candidates = response.candidates || [];
+    if (!candidates.length) {
+      if (attempt < MAX_EXTRACT_ATTEMPTS) {
+        console.log(`[gemini] extractGarment attempt ${attempt} no candidates — retrying in 3s...`);
+        await new Promise(r => setTimeout(r, 3000));
+        continue;
+      }
+      throw new Error("No response from Gemini for garment extraction");
+    }
 
-  const parts = candidates[0].content?.parts || [];
-  for (const part of parts) {
-    if (part.inlineData) {
-      console.log(`[gemini] extractGarment - success, length=${part.inlineData.data.length}`);
-      return part.inlineData.data;
+    const parts = candidates[0].content?.parts || [];
+    for (const part of parts) {
+      if (part.inlineData) {
+        console.log(`[gemini] extractGarment - success, length=${part.inlineData.data.length}`);
+        return part.inlineData.data;
+      }
+    }
+
+    if (attempt < MAX_EXTRACT_ATTEMPTS) {
+      console.log(`[gemini] extractGarment attempt ${attempt} no image — retrying in 3s...`);
+      await new Promise(r => setTimeout(r, 3000));
+      continue;
     }
   }
 
@@ -449,27 +489,53 @@ CRITICAL: Output ONLY ONE person in the image. Do NOT create a side-by-side comp
 
   console.log(`\x1b[34m  └─── CALLING GEMINI API (single outfit call)... ───┘\x1b[0m`);
 
-  const response = await client.models.generateContent({
-    model: "gemini-3.1-flash-image-preview",
-    contents: [{ role: "user", parts }],
-    config: {
-      responseModalities: ["TEXT", "IMAGE"],
-      temperature: 0.4,
-      personGeneration: "ALLOW_ADULT",
-      systemInstruction: "You are a virtual clothing try-on system. Preserve the identity of the person in the reference images with absolute fidelity — same face geometry, skin tone, ethnicity, hair, and body. Do NOT substitute a different person or model.",
-    },
-  });
+  const MAX_OUTFIT_ATTEMPTS = 3;
+  for (let attempt = 1; attempt <= MAX_OUTFIT_ATTEMPTS; attempt++) {
+    let response;
+    try {
+      response = await client.models.generateContent({
+        model: "gemini-3.1-flash-image-preview",
+        contents: [{ role: "user", parts }],
+        config: {
+          responseModalities: ["TEXT", "IMAGE"],
+          temperature: 0.4,
+          personGeneration: "ALLOW_ADULT",
+          systemInstruction: "You are a virtual clothing try-on system. Preserve the identity of the person in the reference images with absolute fidelity — same face geometry, skin tone, ethnicity, hair, and body. Do NOT substitute a different person or model.",
+        },
+      });
+    } catch (err) {
+      const msg = (err.message || "") + (err.status || "");
+      const isTransient = /503|429|UNAVAILABLE|high demand|overloaded|rate.?limit/i.test(msg);
+      if (isTransient && attempt < MAX_OUTFIT_ATTEMPTS) {
+        console.log(`\x1b[33m  ⟳ GEMINI outfit attempt ${attempt} transient error: ${err.message} — retrying in 3s...\x1b[0m`);
+        await new Promise(r => setTimeout(r, 3000));
+        continue;
+      }
+      throw err;
+    }
 
-  const candidates = response.candidates || [];
-  if (!candidates.length) {
-    throw new Error("No response from Gemini for outfit try-on");
-  }
+    const candidates = response.candidates || [];
+    if (!candidates.length) {
+      if (attempt < MAX_OUTFIT_ATTEMPTS) {
+        console.log(`\x1b[33m  ⟳ GEMINI outfit attempt ${attempt} no candidates — retrying in 3s...\x1b[0m`);
+        await new Promise(r => setTimeout(r, 3000));
+        continue;
+      }
+      throw new Error("No response from Gemini for outfit try-on");
+    }
 
-  const responseParts = candidates[0].content?.parts || [];
-  for (const part of responseParts) {
-    if (part.inlineData) {
-      console.log(`\x1b[32m  ✓ GEMINI OUTFIT RESPONSE RECEIVED\x1b[0m — image: ${part.inlineData.data.length} chars`);
-      return part.inlineData.data;
+    const responseParts = candidates[0].content?.parts || [];
+    for (const part of responseParts) {
+      if (part.inlineData) {
+        console.log(`\x1b[32m  ✓ GEMINI OUTFIT RESPONSE RECEIVED\x1b[0m — image: ${part.inlineData.data.length} chars`);
+        return part.inlineData.data;
+      }
+    }
+
+    if (attempt < MAX_OUTFIT_ATTEMPTS) {
+      console.log(`\x1b[33m  ⟳ GEMINI outfit attempt ${attempt} no image — retrying in 3s...\x1b[0m`);
+      await new Promise(r => setTimeout(r, 3000));
+      continue;
     }
   }
 

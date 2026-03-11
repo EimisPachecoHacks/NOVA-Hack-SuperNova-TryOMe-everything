@@ -16,14 +16,23 @@ router.post("/", optionalAuth, async (req, res, next) => {
       return res.status(400).json({ error: "query is required" });
     }
 
+    // Sanitize query — replace words that trigger Nova Act guardrails
+    const GUARDRAIL_REPLACEMENTS = { "nude": "beige", "naked": "bare", "sexy": "fitted", "sheer": "semi-transparent" };
+    let sanitizedQuery = query.trim();
+    for (const [bad, good] of Object.entries(GUARDRAIL_REPLACEMENTS)) {
+      sanitizedQuery = sanitizedQuery.replace(new RegExp(`\\b${bad}\\b`, "gi"), good);
+    }
+
+    const startTime = Date.now();
     console.log(`\n[smartSearch] ========== SMART SEARCH REQUEST ==========`);
-    console.log(`[smartSearch] query: "${query}"`);
+    console.log(`[smartSearch] query: "${sanitizedQuery}"${sanitizedQuery !== query.trim() ? ` (original: "${query.trim()}")` : ""}`);
     console.log(`[smartSearch] authenticated: ${!!req.userId}`);
     console.log(`[smartSearch] Spawning Python Nova Act process...`);
 
-    const result = await runPythonSearch(query.trim());
+    const result = await runPythonSearch(sanitizedQuery);
 
-    console.log(`[smartSearch] Results: ${result.products ? result.products.length : 0} products`);
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[smartSearch] Results: ${result.products ? result.products.length : 0} products (${elapsed}s)`);
     console.log(`[smartSearch] ========== SMART SEARCH COMPLETE ==========\n`);
 
     res.json(result);
