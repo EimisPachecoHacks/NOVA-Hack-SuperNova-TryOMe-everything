@@ -99,51 +99,60 @@ async function initWardrobe() {
   if (earringsQuery) document.getElementById("loadingEarrings").hidden = false;
   if (braceletsQuery) document.getElementById("loadingBracelets").hidden = false;
 
-  // All 6 categories in parallel — t3.medium 4GB RAM + 2GB swap (6GB total) handles 6 Nova Act processes
-  const allSearches = [];
+  // Wave 1: Clothing (top, bottom, shoes) + user photo — 3 Nova Act processes fit in 4GB RAM
+  const wave1 = [];
+  let topSizeStr = "", bottomSizeStr = "", shoesSizeStr = "";
 
   if (topQuery) {
-    const topSizeStr = clothesSizeParam ? ` size ${clothesSizeParam}` : "";
+    topSizeStr = clothesSizeParam ? ` size ${clothesSizeParam}` : "";
     const tq = /top|shirt|blouse|sweater|jacket|hoodie|t-shirt|tee|tank|polo|coat|blazer|cardigan|vest|tunic|crop/i.test(topQuery) ? topQuery : `${topQuery} top`;
-    allSearches.push(searchCategory("top", `${tq} ${sexSuffix}${topSizeStr}`));
+    wave1.push(searchCategory("top", `${tq} ${sexSuffix}${topSizeStr}`));
   } else {
     updateCategoryStatus("top", "Skipped");
   }
 
   if (bottomQuery) {
-    const bottomSizeStr = clothesSizeParam ? ` size ${clothesSizeParam}` : "";
+    bottomSizeStr = clothesSizeParam ? ` size ${clothesSizeParam}` : "";
     const bq = /bottom|pants|jeans|shorts|skirt|trousers|leggings|joggers|chinos|slacks|capri/i.test(bottomQuery) ? bottomQuery : `${bottomQuery} pants`;
-    allSearches.push(searchCategory("bottom", `${bq} ${sexSuffix}${bottomSizeStr}`));
+    wave1.push(searchCategory("bottom", `${bq} ${sexSuffix}${bottomSizeStr}`));
   } else {
     updateCategoryStatus("bottom", "Skipped");
   }
 
   if (shoesQuery) {
-    const shoesSizeStr = shoesSizeParam ? ` size ${shoesSizeParam}` : "";
+    shoesSizeStr = shoesSizeParam ? ` size ${shoesSizeParam}` : "";
     const sq = /shoes?|sneakers?|boots?|sandals?|heels?|flats?|loafers?|moccasins?|slippers?|pumps?|oxfords?/i.test(shoesQuery) ? shoesQuery : `${shoesQuery} shoes`;
-    allSearches.push(searchCategory("shoes", `${sq} ${sexSuffix}${shoesSizeStr}`));
+    wave1.push(searchCategory("shoes", `${sq} ${sexSuffix}${shoesSizeStr}`));
   } else {
     updateCategoryStatus("shoes", "Skipped");
   }
 
+  wave1.push(loadUserPhoto());
+  await Promise.allSettled(wave1);
+  console.log(`[Wardrobe] Wave 1 (clothing) complete — ${((Date.now() - searchStartTime) / 1000).toFixed(1)}s`);
+
+  // Wave 2: Accessories (necklace, earrings, bracelets) — after clothing finishes to avoid OOM
+  const wave2 = [];
+
   if (necklaceQuery) {
     const nq = /necklace/i.test(necklaceQuery) ? necklaceQuery : `${necklaceQuery} necklace`;
-    allSearches.push(searchCategory("necklace", `${nq} ${sexSuffix}`));
+    wave2.push(searchCategory("necklace", `${nq} ${sexSuffix}`));
   }
   if (earringsQuery) {
     const eq = /earrings?/i.test(earringsQuery) ? earringsQuery : `${earringsQuery} earrings`;
-    allSearches.push(searchCategory("earrings", `${eq} ${sexSuffix}`));
+    wave2.push(searchCategory("earrings", `${eq} ${sexSuffix}`));
   }
   if (braceletsQuery) {
     const bq = /bracelets?/i.test(braceletsQuery) ? braceletsQuery : `${braceletsQuery} bracelet`;
-    allSearches.push(searchCategory("bracelets", `${bq} ${sexSuffix}`));
+    wave2.push(searchCategory("bracelets", `${bq} ${sexSuffix}`));
   }
 
-  // Fetch user photo in parallel (lightweight, no Nova Act)
-  allSearches.push(loadUserPhoto());
+  if (wave2.length > 0) {
+    await Promise.allSettled(wave2);
+    console.log(`[Wardrobe] Wave 2 (accessories) complete — ${((Date.now() - searchStartTime) / 1000).toFixed(1)}s`);
+  }
 
-  await Promise.allSettled(allSearches);
-  console.log(`[Wardrobe] All 6 searches complete — ${((Date.now() - searchStartTime) / 1000).toFixed(1)}s elapsed`);
+  console.log(`[Wardrobe] All searches complete — ${((Date.now() - searchStartTime) / 1000).toFixed(1)}s elapsed`);
 
   stopTimer();
   showWardrobe();

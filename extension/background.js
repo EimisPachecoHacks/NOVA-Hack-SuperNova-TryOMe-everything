@@ -418,7 +418,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           if (message.clothesSize) voiceSearchUrl += `&clothesSize=${encodeURIComponent(message.clothesSize)}`;
           if (message.shoesSize) voiceSearchUrl += `&shoesSize=${encodeURIComponent(message.shoesSize)}`;
           const searchUrl = chrome.runtime.getURL(voiceSearchUrl);
-          chrome.tabs.create({ url: searchUrl });
+          // Reuse existing search tab if open, otherwise create new
+          const existingTabs = await chrome.tabs.query({ url: chrome.runtime.getURL("smart-search/results.html*") });
+          if (existingTabs.length > 0) {
+            await chrome.tabs.update(existingTabs[0].id, { url: searchUrl, active: true });
+          } else {
+            await chrome.tabs.create({ url: searchUrl });
+          }
           sendResponse({ data: { opened: true } });
           break;
         }

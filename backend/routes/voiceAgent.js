@@ -31,7 +31,9 @@ Outfit ("outfit", "full look"): call delegate_to_outfit_builder.
 
 After results load: use recommend_items when user asks "which looks best?". Use select_search_item when user picks by number.
 
-After calling any tool, stop talking and wait. Only call tools when the user asks.`;
+After calling smart_search, suggest_item and select_search_item tool stop talking and wait. But after delegate_to_outfit_builder keep talking base on the user intension.
+
+Only call tools when the user asks.`;
 
 const OUTFIT_BUILDER_PROMPT = `You are Stella, a warm and stylish AI personal stylist helping build an outfit. Keep responses to 1-2 short sentences. Speak naturally and use the user's name.
 
@@ -51,7 +53,7 @@ select_outfit_items: one category + one number per call. Categories: top, bottom
 
 If the user asks for a SINGLE item (a dress, shoes, a jacket) instead of an outfit, call delegate_to_stylist.
 
-After calling any tool, STOP talking and wait silently for the user.
+After calling build_outfit, select_outfit_items, or any action tool, STOP talking and wait. But after delegate_to_stylist, keep talking and help immediately.
 
 {{CONTEXT_SUMMARY}}`;
 
@@ -385,7 +387,7 @@ async function executeTool(toolName, argsJson, socket) {
         });
         return {
           status: "success",
-          message: `Opening the Outfit Builder with: ${parts.join(", ")}. The wardrobe is searching Amazon and will display NUMBERED items in each category. Wait silently for items to load. When the user asks which items look best, call recommend_items, then select each with select_outfit_items.`,
+          message: `Opening the Outfit Builder with: ${parts.join(", ")}. The wardrobe is NOW SEARCHING Amazon — it is NOT ready yet. Do NOT call select_outfit_items. Do NOT call recommend_items. Do NOT call any tool. STOP talking and WAIT silently for the user to speak first.`,
           acknowledged: !!ack.acknowledged,
         };
       }
@@ -713,7 +715,7 @@ async function executeTool(toolName, argsJson, socket) {
         if (pendingAction.args.bracelets) parts.push(`bracelets="${pendingAction.args.bracelets}"`);
         return {
           status: "success",
-          message: `Opening the Outfit Builder with: ${parts.join(", ")}. The wardrobe is searching Amazon and will display NUMBERED items in each category. Once items load, the user can say "top number 3" or "necklace number 2" to select. Use select_outfit_items with category and number. The outfit builder handles all searching — just wait for the user to pick items.`,
+          message: `Opening the Outfit Builder with: ${parts.join(", ")}. The wardrobe is NOW SEARCHING Amazon — it is NOT ready yet. Items are still loading. Do NOT call select_outfit_items. Do NOT call outfit_tryon. Do NOT call any tool. STOP talking and WAIT silently for the user to speak first. The user will tell you which items to select after they see the wardrobe.`,
           acknowledged: !!ack.acknowledged,
         };
       }
@@ -745,12 +747,12 @@ async function executeTool(toolName, argsJson, socket) {
     case "delegate_to_outfit_builder": {
       const request = args.request || "build a complete outfit";
       console.log(`[VoiceAgent] delegate_to_outfit_builder — switching agent. Request: "${request}"`);
-      const summary = `The user asked: "${request}". They want a complete outfit. Recommend items for all 6 categories.`;
-      // Switch happens async — tell the stylist to inform the user
-      setTimeout(() => socket._switchAgent && socket._switchAgent("outfit_builder", summary), 500);
+      const summary = `The user asked: "${request}". They already heard item recommendations from the previous agent. Help them build the outfit with build_outfit when they confirm.`;
+      // Delay switch 12s so the stylist has time to speak the full recommendation before session closes
+      setTimeout(() => socket._switchAgent && socket._switchAgent("outfit_builder", summary), 12000);
       return {
         status: "success",
-        message: `Switching to outfit builder mode. Tell the user "Let me help you build a complete outfit!" and stop talking. The outfit builder will take over.`,
+        message: `Say "Let me help you build a complete outfit!" Then say "I recommend..." and describe all 6 items (top, bottom, shoes, necklace, earrings, bracelets) with specific color, material, and style. Then ask "Would you like to go with this selection or make any changes?" Do NOT stop talking until you finish describing all 6 items.`,
       };
     }
 
