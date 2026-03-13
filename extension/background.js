@@ -229,7 +229,8 @@ async function getStoredPhotos() {
   // Always fetch face photo fresh based on selectedFaceIndex (indices 3+ in originals)
   try {
     const allPhotos = await apiGet("/api/profile/photos/all");
-    if (!bodyPhoto && allPhotos.generated && allPhotos.generated[selectedPoseIndex]) {
+    // Always use the photo matching the selected pose (not cached from a previous pose)
+    if (allPhotos.generated && allPhotos.generated[selectedPoseIndex]) {
       bodyPhoto = allPhotos.generated[selectedPoseIndex];
       await chrome.storage.local.set({ bodyPhoto });
     }

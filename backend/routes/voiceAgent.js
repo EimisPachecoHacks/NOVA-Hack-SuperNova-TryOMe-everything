@@ -25,9 +25,9 @@ Always respond in {{LANGUAGE}}. Tool arguments must always be in English.
 USER PROFILE: {{USER_PROFILE}}
 Use the user's sex to filter searches automatically. Never ask for sex or size.
 
+Outfit ("outfit", "full look", "complete look"): call delegate_to_outfit_builder IMMEDIATELY. Do NOT call suggest_item or smart_search first.
 Direct request ("find me X", "show me X"): call smart_search immediately. Say "on it".
-Recommendation ("recommend me X", "suggest X"): call suggest_item to describe what you recommend. After user confirms, call smart_search.
-Outfit ("outfit", "full look"): call delegate_to_outfit_builder.
+Recommendation for a SINGLE item ("recommend me a dress", "suggest a jacket"): call suggest_item. After user confirms, call smart_search.
 
 After results load: use recommend_items when user asks "which looks best?". Use select_search_item when user picks by number.
 
@@ -45,9 +45,10 @@ Use the user's sex to filter searches automatically. Never ask for sex or size.
 FLOW:
 1. Say "I recommend..." and describe all 6 items (top, bottom, shoes, necklace, earrings, bracelets) with specific searchable descriptions (color + material + style). Then ask "Would you like to go with this selection or make any changes?"
 2. When user confirms, say "generating your outfit now" and call build_outfit with all 6 items. Then STOP talking and wait silently.
-3. Do NOT say "your look is ready" or "outfit is ready" until AFTER the user speaks again. The wardrobe needs time to load.
-4. When user asks which items look best, call recommend_items. Then select each with select_outfit_items (one call per category). Ask "Would you like to see how these look on you?"
-5. When user confirms try-on, call outfit_tryon. Wait silently.
+3. Do NOT say "your look is ready" or "outfit is ready" until AFTER the user speaks again. The wardrobe needs time to load. STOP talking completely after calling build_outfit/confirm_outfit.
+4. When the user speaks NEXT (after silence), tell them: "Your wardrobe is ready! To select items, give me the category and number, or ask me to recommend the best combination for you."
+5. If user asks for recommendation or which items are best, call recommend_items. Then select each with select_outfit_items (one call per category).
+6. After all items are selected, ask "Would you like to see how these look on you?" When user confirms, call outfit_tryon. Wait silently.
 
 select_outfit_items: one category + one number per call. Categories: top, bottom, shoes, necklace, earrings, bracelets.
 
@@ -387,7 +388,7 @@ async function executeTool(toolName, argsJson, socket) {
         });
         return {
           status: "success",
-          message: `Opening the Outfit Builder with: ${parts.join(", ")}. The wardrobe is NOW SEARCHING Amazon — it is NOT ready yet. Do NOT call select_outfit_items. Do NOT call recommend_items. Do NOT call any tool. STOP talking and WAIT silently for the user to speak first.`,
+          message: `Opening the Outfit Builder with: ${parts.join(", ")}. The wardrobe is NOW SEARCHING Amazon — it takes 30-60 seconds to load. Say ONLY "generating your wardrobe now" and NOTHING else. Do NOT call any tool. Do NOT say anything about selecting items. STOP talking completely. The user will speak again when they can see the wardrobe.`,
           acknowledged: !!ack.acknowledged,
         };
       }
@@ -648,10 +649,25 @@ async function executeTool(toolName, argsJson, socket) {
       console.log(`[VoiceAgent] select_outfit_items EXECUTING selection: ${cat} #${num}`);
       socket.emit("toolAction", selectionPayload);
 
-      return {
-        status: "success",
-        message: `Selected ${cat} #${num} in the outfit builder. The item is now highlighted in the wardrobe. Once all items are selected, ask the user "Would you like to see how these items look on you?" and wait for their response. When they confirm, call outfit_tryon. Do NOT assume try-on happens automatically — you must call outfit_tryon explicitly.`,
-      };
+      // Track selected categories to know when all are done
+      if (!socket._selectedOutfitCategories) socket._selectedOutfitCategories = new Set();
+      socket._selectedOutfitCategories.add(cat);
+      const selectedCount = socket._selectedOutfitCategories.size;
+      const allDone = selectedCount >= 6;
+
+      if (allDone) {
+        // Reset for next round
+        socket._selectedOutfitCategories = new Set();
+        return {
+          status: "success",
+          message: `Selected ${cat} #${num}. All 6 items are now selected. Now explain to the user WHY this combination works well — mention how colors complement each other, style coordination, and why it suits them. THEN ask "Would you like to see how these items look on you?" and wait. When they confirm, call outfit_tryon.`,
+        };
+      } else {
+        return {
+          status: "success",
+          message: `Selected ${cat} #${num}. ${6 - selectedCount} categories remaining. Continue selecting the next category immediately — do NOT pause, do NOT explain, do NOT ask questions yet.`,
+        };
+      }
     }
 
     case "confirm_outfit": {
@@ -715,7 +731,7 @@ async function executeTool(toolName, argsJson, socket) {
         if (pendingAction.args.bracelets) parts.push(`bracelets="${pendingAction.args.bracelets}"`);
         return {
           status: "success",
-          message: `Opening the Outfit Builder with: ${parts.join(", ")}. The wardrobe is NOW SEARCHING Amazon — it is NOT ready yet. Items are still loading. Do NOT call select_outfit_items. Do NOT call outfit_tryon. Do NOT call any tool. STOP talking and WAIT silently for the user to speak first. The user will tell you which items to select after they see the wardrobe.`,
+          message: `Opening the Outfit Builder with: ${parts.join(", ")}. The wardrobe is NOW SEARCHING Amazon — it takes 30-60 seconds to load. Say ONLY "generating your wardrobe now" and NOTHING else. Do NOT call any tool. Do NOT say anything about selecting items. STOP talking completely. The user will speak again when they can see the wardrobe.`,
           acknowledged: !!ack.acknowledged,
         };
       }
@@ -1003,6 +1019,7 @@ function setupVoiceAgent(io) {
         socket._voiceOutfitResults = data;
         const count = (data.tops?.length || 0) + (data.bottoms?.length || 0) + (data.shoes?.length || 0) + (data.necklaces?.length || 0) + (data.earrings?.length || 0) + (data.bracelets?.length || 0);
         console.log(`[VoiceAgent] Cached ${count} outfit items (including accessories) for recommendations`);
+        socket._wardrobeReady = true;
       }
     });
 

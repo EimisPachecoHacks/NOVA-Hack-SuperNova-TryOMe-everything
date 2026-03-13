@@ -463,7 +463,11 @@ ${garmentLabelsSimple}
 
 Generate exactly ONE single photorealistic image of the customer wearing ALL these garments as a complete outfit. White studio background. ${FRAMING}
 
-CRITICAL: Output ONLY ONE person in the image. Do NOT create a side-by-side comparison, before/after, or collage. Do NOT show the person twice. The output must contain exactly one person in one pose.`;
+CRITICAL RULES:
+- Output EXACTLY ONE person in ONE pose. Never two or three people.
+- Do NOT create side-by-side, before/after, collage, triptych, or multiple angles.
+- Do NOT show the person from multiple viewpoints.
+- The output must contain a SINGLE person centered in the frame.`;
 
   // Build contents array: GARMENTS first, then IDENTITY photos last (closest to prompt)
   const parts = [];

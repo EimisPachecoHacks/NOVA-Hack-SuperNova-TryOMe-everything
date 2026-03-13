@@ -432,6 +432,8 @@ class SonicSession {
           if (evt.audioOutput && this.onAudioOutput) {
             this.onAudioOutput(evt.audioOutput.content);
           } else if (evt.textOutput && this.onTextOutput) {
+            // Filter SPECULATIVE text — only forward FINAL to prevent duplicates
+            if (evt.textOutput.generationStage === "SPECULATIVE") continue;
             this.onTextOutput(evt.textOutput.content, evt.textOutput.role);
           } else if (evt.toolUse && this.onToolUse) {
             this.onToolUse(
