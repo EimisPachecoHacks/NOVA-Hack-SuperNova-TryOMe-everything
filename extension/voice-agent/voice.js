@@ -225,9 +225,23 @@ async function startSession() {
 
     const voiceId = voiceSelect.value;
 
-    // Start the Nova Sonic session
+    // Get user language preference from profile/storage
+    const langStorage = await new Promise(r => chrome.storage.local.get(['stellaLanguage', 'authTokens', 'cachedProfile'], r));
+    const cachedProfile = langStorage.cachedProfile || {};
+    const userLang = cachedProfile.language || langStorage.stellaLanguage || 'en';
+    const authToken = langStorage.authTokens?.idToken || null;
+
+    // Start the Nova Sonic session with user profile
     await new Promise((resolve, reject) => {
-      socket.emit("startSession", { voiceId }, (response) => {
+      socket.emit("startSession", {
+        voiceId,
+        language: userLang,
+        authToken,
+        firstName: cachedProfile.firstName || null,
+        sex: cachedProfile.sex || null,
+        clothesSize: cachedProfile.clothesSize || null,
+        shoesSize: cachedProfile.shoesSize || null,
+      }, (response) => {
         if (response.status === "ok") resolve();
         else reject(new Error(response.message || "Failed to start session"));
       });

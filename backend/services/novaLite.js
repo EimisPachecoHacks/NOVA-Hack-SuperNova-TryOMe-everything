@@ -72,7 +72,6 @@ IMPORTANT: Return ONLY valid JSON, no additional text.`;
     }],
     system: [{ text: systemPrompt }],
     inferenceConfig: {
-      maxTokens: 512,
       temperature: 0.1
     }
   }));
@@ -148,7 +147,6 @@ IMPORTANT: Return ONLY valid JSON, no additional text.`;
     }],
     system: [{ text: systemPrompt }],
     inferenceConfig: {
-      maxTokens: 256,
       temperature: 0.1
     }
   }));
@@ -214,7 +212,6 @@ IMPORTANT: Return ONLY valid JSON, no additional text.`;
     }],
     system: [{ text: systemPrompt }],
     inferenceConfig: {
-      maxTokens: 256,
       temperature: 0.1
     }
   }));
@@ -354,7 +351,7 @@ IMPORTANT: Return ONLY valid JSON array, no additional text.`,
           text: "You are an expert personal stylist AI. You analyze a person's photo and product images to give honest, personalized fashion recommendations. You consider body type, skin tone, face shape, current style, and color theory. When a screenshot of the results page is provided, use it to visually assess each product's colors, patterns, and style. Your recommendations are specific to the person — never generic.",
         },
       ],
-      inferenceConfig: { maxTokens: 2048, temperature: 0.3 },
+      inferenceConfig: { temperature: 0.3 },
     })
   );
 
@@ -461,4 +458,51 @@ Answer:`
   }
 }
 
-module.exports = { analyzeProduct, classifyOutfit, hasPersonInImage, recommendItems, classifySearchQuery, classifyVoiceIntent };
+/**
+ * Extract outfit item descriptions from user transcript using Nova 2 Lite.
+ * Returns an object with the 6 categories and the user's exact descriptions.
+ */
+async function extractOutfitItems(transcript) {
+  try {
+    const response = await bedrockClient.send(new ConverseCommand({
+      modelId: "us.amazon.nova-2-lite-v1:0",
+      messages: [{
+        role: "user",
+        content: [{
+          text: `Extract outfit item descriptions from this conversation transcript. Return ONLY valid JSON with these 6 keys. Use the user's EXACT words. ALWAYS include the item type (necklace, bracelet, earrings, sneakers, skirt, blouse, etc.) in each description — never return just a color alone.
+
+Examples:
+- User says "golden necklace" → "golden necklace" NOT "golden"
+- User says "black and golden sneakers" → "black and golden sneakers" NOT "black and golden"
+- User says "mix between purple and golden earrings" → "purple and golden earrings"
+- User says "golden bracelet" → "golden bracelet" NOT "golden"
+
+If a category was not mentioned, use null.
+
+{"top": "description with item type or null", "bottom": "description with item type or null", "shoes": "description with item type or null", "necklace": "description with item type or null", "earrings": "description with item type or null", "bracelets": "description with item type or null"}
+
+Transcript: "${transcript}"
+
+JSON:`
+        }]
+      }],
+      inferenceConfig: { temperature: 0 }
+    }));
+
+    const raw = (response.output.message.content[0].text || "").trim();
+    // Extract JSON from response (may have markdown backticks)
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      console.log(`[novaLite] extractOutfitItems result:`, JSON.stringify(parsed));
+      return parsed;
+    }
+    console.warn(`[novaLite] extractOutfitItems: no JSON in response: ${raw}`);
+    return null;
+  } catch (err) {
+    console.error(`[novaLite] extractOutfitItems error:`, err.message);
+    return null;
+  }
+}
+
+module.exports = { analyzeProduct, classifyOutfit, hasPersonInImage, recommendItems, classifySearchQuery, classifyVoiceIntent, extractOutfitItems };

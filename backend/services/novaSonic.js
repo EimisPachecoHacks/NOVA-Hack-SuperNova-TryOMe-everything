@@ -285,7 +285,6 @@ class SonicSession {
             event: {
               sessionStart: {
                 inferenceConfiguration: {
-                  maxTokens: 1024,
                   topP: 0.9,
                   temperature: 0.7,
                 },

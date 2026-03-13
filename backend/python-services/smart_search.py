@@ -79,17 +79,18 @@ def smart_search(query: str, headless: bool = True) -> list[dict]:
             f"Type '{query}' into the search bar and press Enter to search."
         )
 
-        # Step 2: Apply 4-star filter AND sort by Avg. Customer Review
-        log("Step 2: Filtering 4★+ and sorting by review...")
+        # Step 2: Apply 4-star filter only — keep Amazon's default relevance sort
+        # NOTE: Do NOT sort by "Avg. Customer Review" — it destroys keyword
+        # relevance and returns random highly-rated items that ignore the query
+        # (e.g. "golden necklace" returns dog pendants and cremation urns).
+        log("Step 2: Filtering 4★+ (keeping relevance sort)...")
         try:
             nova.act(
                 "On the left sidebar, find the 'Customer Reviews' section "
-                "and click on '4 Stars & Up'. Then click the sort dropdown "
-                "(it may say 'Featured' or 'Sort by') and select "
-                "'Avg. Customer Review'."
+                "and click on '4 Stars & Up'."
             )
         except Exception as e:
-            log(f"Warning: Could not apply filter/sort: {e}")
+            log(f"Warning: Could not apply filter: {e}")
 
         # Step 3: Wait for page to fully render, then extract
         log("Step 3: Waiting for results to render...")

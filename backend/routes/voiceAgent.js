@@ -35,7 +35,7 @@ After calling smart_search, suggest_item and select_search_item tool stop talkin
 
 Only call tools when the user asks.`;
 
-const OUTFIT_BUILDER_PROMPT = `You are Stella, a warm and stylish AI personal stylist helping build an outfit. Keep responses to 1-2 short sentences. Speak naturally and use the user's name.
+const OUTFIT_BUILDER_PROMPT = `You are Stella, a warm and stylish AI personal stylist. Keep responses to 1-2 short sentences. Speak naturally and use the user's name. Greet with "How can I help you with your style today?" and wait for the user to tell you what they need.
 
 Always respond in {{LANGUAGE}}. Tool arguments must always be in English.
 
@@ -43,12 +43,13 @@ USER PROFILE: {{USER_PROFILE}}
 Use the user's sex to filter searches automatically. Never ask for sex or size.
 
 FLOW:
-1. Say "I recommend..." and describe all 6 items (top, bottom, shoes, necklace, earrings, bracelets) with specific searchable descriptions (color + material + style). Then ask "Would you like to go with this selection or make any changes?"
-2. When user confirms, say "generating your outfit now" and call build_outfit with all 6 items. Then STOP talking and wait silently.
-3. Do NOT say "your look is ready" or "outfit is ready" until AFTER the user speaks again. The wardrobe needs time to load. STOP talking completely after calling build_outfit/confirm_outfit.
-4. When the user speaks NEXT (after silence), tell them: "Your wardrobe is ready! To select items, give me the category and number, or ask me to recommend the best combination for you."
-5. If user asks for recommendation or which items are best, call recommend_items. Then select each with select_outfit_items (one call per category).
-6. After all items are selected, ask "Would you like to see how these look on you?" When user confirms, call outfit_tryon. Wait silently.
+1. If the user describes specific items ("blue top, black skirt, golden sneakers"), accept what they said as-is. Do NOT ask for more details, style, or material. Listen until they finish ALL 6 categories (top, bottom, shoes, necklace, earrings, bracelets). If any category is missing, ask ONLY which category is missing. Once all 6 are described, repeat back the items and ask "Would you like to go with this selection or make any changes?" WAIT for the user to confirm. Only AFTER the user confirms, call build_outfit. IMPORTANT: build_outfit arguments must be Amazon-searchable descriptions. Always include the item type. Convert conversational phrases to search terms. Examples: "between golden and purple" → "golden and purple earrings", "something like red" → "red necklace". Do NOT add materials or styles they never mentioned. Do NOT recommend alternatives.
+2. If the user asks for a recommendation ("recommend me an outfit", "surprise me"), ONLY THEN say "I recommend..." and describe all 6 items. Ask "Would you like to go with this selection or make any changes?" When confirmed, call build_outfit.
+3. After calling build_outfit, say "generating your outfit now" and STOP talking. Wait silently.
+4. Do NOT say "your look is ready" or "outfit is ready" until AFTER the user speaks again. The wardrobe needs time to load. STOP talking completely after calling build_outfit/confirm_outfit.
+5. When the user speaks NEXT (after silence), tell them: "Your wardrobe is ready! To select items, give me the category and number, or ask me to recommend the best combination for you."
+6. ONLY call recommend_items if the user EXPLICITLY asks for your recommendation ("recommend me", "which do you think is best", "what do you recommend"). If the user says "I want to select my own" or gives you a number, use select_outfit_items directly. NEVER force recommendations.
+7. After all items are selected, ask "Would you like to see how these look on you?" When user confirms, call outfit_tryon. Wait silently.
 
 select_outfit_items: one category + one number per call. Categories: top, bottom, shoes, necklace, earrings, bracelets.
 
@@ -131,7 +132,7 @@ const TOOL_DEFS = {
   },
   recommend_items: {
     name: "recommend_items",
-    description: "Visually analyze items against the user's photo for personalized recommendations. Only when user asks.",
+    description: "Visually analyze items against the user's photo. ONLY call when user EXPLICITLY says 'recommend', 'which is best for me', or 'what do you think'. NEVER call if user wants to select their own items.",
     inputSchema: { json: JSON.stringify({ type: "object", properties: {}, required: [] }) },
   },
   build_outfit: {
@@ -162,7 +163,7 @@ const TOOL_DEFS = {
   delegate_to_outfit_builder: {
     name: "delegate_to_outfit_builder",
     description: "ONLY when the user literally says the word 'outfit' or 'full look' or 'complete look'. Examples: 'build me an outfit', 'I want an outfit for a party', 'put together a full look'. Do NOT use for: 'recommend me a dress', 'find me shoes', 'suggest a jacket for a party' — those are single items, use smart_search or suggest_item instead.",
-    inputSchema: { json: JSON.stringify({ type: "object", properties: { request: { type: "string", description: "What the user asked for" } }, required: ["request"] }) },
+    inputSchema: { json: JSON.stringify({ type: "object", properties: { request: { type: "string", description: "Include EVERYTHING the user said — all item descriptions, colors, materials, styles, sizes, and preferences for each category. Example: 'purple top, black middle-size skirt, black and golden sneakers, red and golden necklace, black earrings, golden bracelet'" } }, required: ["request"] }) },
   },
 };
 
@@ -371,25 +372,12 @@ async function executeTool(toolName, argsJson, socket) {
       if (!pending.args.earrings) missing.push("earrings");
       if (!pending.args.bracelets) missing.push("bracelets");
 
-      // All 6 categories filled in one call → user already confirmed, auto-execute
+      // NEVER auto-execute — always wait for user confirmation via confirm_outfit
       if (missing.length === 0) {
-        console.log(`[VoiceAgent] build_outfit: all 6 categories filled — auto-executing (opening wardrobe)`);
-        socket._pendingOutfitAction = null;
-        socket._wardrobeOpen = true;
-        socket._awaitingOutfitConfirmation = false;
-        const ack = await emitAndWaitForAck(socket, {
-          action: "build_outfit",
-          top: pending.args.top,
-          bottom: pending.args.bottom,
-          shoes: pending.args.shoes,
-          necklace: pending.args.necklace,
-          earrings: pending.args.earrings,
-          bracelets: pending.args.bracelets,
-        });
+        console.log(`[VoiceAgent] build_outfit: all 6 categories filled — waiting for user confirmation`);
         return {
           status: "success",
-          message: `Opening the Outfit Builder with: ${parts.join(", ")}. The wardrobe is NOW SEARCHING Amazon — it takes 30-60 seconds to load. Say ONLY "generating your wardrobe now" and NOTHING else. Do NOT call any tool. Do NOT say anything about selecting items. STOP talking completely. The user will speak again when they can see the wardrobe.`,
-          acknowledged: !!ack.acknowledged,
+          message: `All 6 categories noted: ${parts.join(", ")}. Do NOT repeat the items — you already said them. Just ask "Would you like to go with this selection or make any changes?" Do NOT call confirm_outfit yet — WAIT for the user to verbally confirm.`,
         };
       }
 
@@ -577,10 +565,13 @@ async function executeTool(toolName, argsJson, socket) {
           const outfitRec = await recommendItems(userPhotoBase64, null, userProfile, screenshotBase64, categoryData);
           console.log(`[VoiceAgent] Outfit recommendation results:`, JSON.stringify(outfitRec));
 
+          // Enable auto-select mode so select_outfit_items selects all rapidly
+          socket._autoSelectMode = true;
+          socket._selectedOutfitCategories = new Set();
           return {
             status: "success",
             recommendations: outfitRec,
-            message: `Analyzed outfit items across ${Object.keys(categoryData).length} categories against the user's photo. Here is the recommended combination with the best item number for each category. Use select_outfit_items to select each recommended item by its category and number.`,
+            message: `Analyzed outfit items across ${Object.keys(categoryData).length} categories against the user's photo. Here is the recommended combination with the best item number for each category. Explain briefly WHY these work well together, then use select_outfit_items to select each recommended item by its category and number. Call it once for EACH category.`,
           };
         } else {
           // SMART SEARCH MODE: rank items best to worst
@@ -654,18 +645,26 @@ async function executeTool(toolName, argsJson, socket) {
       socket._selectedOutfitCategories.add(cat);
       const selectedCount = socket._selectedOutfitCategories.size;
       const allDone = selectedCount >= 6;
+      const isAutoSelect = socket._autoSelectMode; // Set by recommend_items
 
       if (allDone) {
-        // Reset for next round
         socket._selectedOutfitCategories = new Set();
+        socket._autoSelectMode = false;
         return {
           status: "success",
-          message: `Selected ${cat} #${num}. All 6 items are now selected. Now explain to the user WHY this combination works well — mention how colors complement each other, style coordination, and why it suits them. THEN ask "Would you like to see how these items look on you?" and wait. When they confirm, call outfit_tryon.`,
+          message: `Selected ${cat} #${num}. All 6 items are now selected. Explain briefly WHY this combination works well, then ask "Would you like to see how these items look on you?" When they confirm, call outfit_tryon.`,
+        };
+      } else if (isAutoSelect) {
+        // Recommendation mode: select all rapidly without pausing
+        return {
+          status: "success",
+          message: `Selected ${cat} #${num}. ${6 - selectedCount} categories remaining. Continue selecting the next category immediately — do NOT pause or ask questions.`,
         };
       } else {
+        // Manual mode: acknowledge and wait for user's next instruction
         return {
           status: "success",
-          message: `Selected ${cat} #${num}. ${6 - selectedCount} categories remaining. Continue selecting the next category immediately — do NOT pause, do NOT explain, do NOT ask questions yet.`,
+          message: `Selected ${cat} #${num}. ${6 - selectedCount} categories remaining. Say "got it, ${cat} number ${num} selected" and wait for the user to tell you the next item. Do NOT select other categories on your own.`,
         };
       }
     }
@@ -711,8 +710,12 @@ async function executeTool(toolName, argsJson, socket) {
       socket._pendingOutfitAction = null;
 
       if (pendingAction.type === "build_outfit") {
+        // Use the agent's descriptions directly — they match what the user confirmed.
+        // extractOutfitItems was removed because it consistently made descriptions
+        // WORSE (dropping colors, changing item types, losing key words).
         console.log(`[VoiceAgent] confirm_outfit executing build_outfit:`, JSON.stringify(pendingAction.args));
         socket._wardrobeOpen = true; // Wardrobe is now open — outfit_tryon allowed
+        const userProf = socket._voiceUserProfile || {};
         const ack = await emitAndWaitForAck(socket, {
           action: "build_outfit",
           top: pendingAction.args.top || null,
@@ -721,6 +724,9 @@ async function executeTool(toolName, argsJson, socket) {
           necklace: pendingAction.args.necklace || null,
           earrings: pendingAction.args.earrings || null,
           bracelets: pendingAction.args.bracelets || null,
+          sex: userProf.sex || null,
+          clothesSize: userProf.clothesSize || null,
+          shoesSize: userProf.shoesSize || null,
         });
         const parts = [];
         if (pendingAction.args.top) parts.push(`top="${pendingAction.args.top}"`);
@@ -763,12 +769,12 @@ async function executeTool(toolName, argsJson, socket) {
     case "delegate_to_outfit_builder": {
       const request = args.request || "build a complete outfit";
       console.log(`[VoiceAgent] delegate_to_outfit_builder — switching agent. Request: "${request}"`);
-      const summary = `The user asked: "${request}". They already heard item recommendations from the previous agent. Help them build the outfit with build_outfit when they confirm.`;
+      const summary = `The user wants these SPECIFIC items: "${request}". Use THEIR exact descriptions for build_outfit. Do NOT change or override what they asked for. If any of the 6 categories (top, bottom, shoes, necklace, earrings, bracelets) is missing from their description, ask about it.`;
       // Delay switch 12s so the stylist has time to speak the full recommendation before session closes
       setTimeout(() => socket._switchAgent && socket._switchAgent("outfit_builder", summary), 12000);
       return {
         status: "success",
-        message: `Say "Let me help you build a complete outfit!" Then say "I recommend..." and describe all 6 items (top, bottom, shoes, necklace, earrings, bracelets) with specific color, material, and style. Then ask "Would you like to go with this selection or make any changes?" Do NOT stop talking until you finish describing all 6 items.`,
+        message: `Switching to outfit builder mode. The user's request was: "${request}". If the user already described specific items, confirm what you heard and proceed — do NOT change their descriptions. If the user asked for a recommendation without specifics, then recommend items.`,
       };
     }
 
@@ -790,7 +796,7 @@ function setupVoiceAgent(io) {
 
     let session = null;
     let idleTimer = null;
-    let currentAgent = "stylist"; // "stylist" or "outfit_builder"
+    let currentAgent = "outfit_builder"; // starts as outfit_builder, delegates to stylist for single items
     let switchInProgress = false;
 
     function resetIdleTimer() {
@@ -837,6 +843,9 @@ function setupVoiceAgent(io) {
         socket.emit("textOutput", { text, role });
         if (role === "USER" || role === "user") {
           socket._lastUserTranscript = (text || "").toLowerCase().trim();
+          // Accumulate all user transcripts for outfit item extraction
+          if (!socket._userTranscriptHistory) socket._userTranscriptHistory = [];
+          socket._userTranscriptHistory.push(text.trim());
 
           // Agent routing handled by delegation tools (delegate_to_outfit_builder / delegate_to_stylist).
           // No external router — the agent decides via tool calls.
@@ -964,9 +973,9 @@ function setupVoiceAgent(io) {
           ? profileParts.join(", ")
           : "No profile information available";
 
-        currentAgent = "stylist";
-        const prompt = buildPrompt("stylist");
-        session = new SonicSession(prompt, STYLIST_TOOLS, voiceId);
+        currentAgent = "outfit_builder";
+        const prompt = buildPrompt("outfit_builder");
+        session = new SonicSession(prompt, OUTFIT_BUILDER_TOOLS, voiceId);
         wireSessionCallbacks();
 
         await session.start();

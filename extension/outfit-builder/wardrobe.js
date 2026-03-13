@@ -40,6 +40,16 @@ const shoesSizeParam = params.get("shoesSize") || "";
 const userSexParam = params.get("sex") || "";
 const sexSuffix = userSexParam === "male" ? "for men" : "for women";
 
+// Debug: log exactly what was received from voice agent → sent to Nova Act
+console.log(`[Wardrobe] === QUERY DEBUG (sent to Nova Act) ===`);
+console.log(`[Wardrobe]   top:       "${topQuery}" → "${topQuery ? topQuery + ' ' + sexSuffix + (clothesSizeParam ? ' size ' + clothesSizeParam : '') : '(skipped)'}"`);
+console.log(`[Wardrobe]   bottom:    "${bottomQuery}" → "${bottomQuery ? bottomQuery + ' ' + sexSuffix + (clothesSizeParam ? ' size ' + clothesSizeParam : '') : '(skipped)'}"`);
+console.log(`[Wardrobe]   shoes:     "${shoesQuery}" → "${shoesQuery ? shoesQuery + ' ' + sexSuffix + (shoesSizeParam ? ' size ' + shoesSizeParam : '') : '(skipped)'}"`);
+console.log(`[Wardrobe]   necklace:  "${necklaceQuery}" → "${necklaceQuery ? necklaceQuery + ' ' + sexSuffix : '(skipped)'}"`);
+console.log(`[Wardrobe]   earrings:  "${earringsQuery}" → "${earringsQuery ? earringsQuery + ' ' + sexSuffix : '(skipped)'}"`);
+console.log(`[Wardrobe]   bracelets: "${braceletsQuery}" → "${braceletsQuery ? braceletsQuery + ' ' + sexSuffix : '(skipped)'}"`);
+console.log(`[Wardrobe] =========================================`);
+
 // Wire event listeners (NO inline handlers)
 document.getElementById("tryOnBtn").addEventListener("click", handleTryOn);
 document.getElementById("favoriteBtn").addEventListener("click", handleSaveFavorite);
@@ -94,62 +104,51 @@ initWardrobe();
 async function initWardrobe() {
   startTimer();
 
-  // Show accessory loading indicators immediately (before Wave 1) so user sees all 6 categories
+  // Show all loading indicators immediately so user sees all 6 categories
   if (necklaceQuery) document.getElementById("loadingNecklace").hidden = false;
   if (earringsQuery) document.getElementById("loadingEarrings").hidden = false;
   if (braceletsQuery) document.getElementById("loadingBracelets").hidden = false;
 
-  // Wave 1: Clothing (top, bottom, shoes) + user photo — 3 Nova Act processes fit in 4GB RAM
+  // Wave 1: 5 categories + user photo (fits in 4GB RAM)
   const wave1 = [];
   let topSizeStr = "", bottomSizeStr = "", shoesSizeStr = "";
 
   if (topQuery) {
     topSizeStr = clothesSizeParam ? ` size ${clothesSizeParam}` : "";
-    const tq = /top|shirt|blouse|sweater|jacket|hoodie|t-shirt|tee|tank|polo|coat|blazer|cardigan|vest|tunic|crop/i.test(topQuery) ? topQuery : `${topQuery} top`;
-    wave1.push(searchCategory("top", `${tq} ${sexSuffix}${topSizeStr}`));
+    wave1.push(searchCategory("top", `${topQuery} ${sexSuffix}${topSizeStr}`));
   } else {
     updateCategoryStatus("top", "Skipped");
   }
 
   if (bottomQuery) {
     bottomSizeStr = clothesSizeParam ? ` size ${clothesSizeParam}` : "";
-    const bq = /bottom|pants|jeans|shorts|skirt|trousers|leggings|joggers|chinos|slacks|capri/i.test(bottomQuery) ? bottomQuery : `${bottomQuery} pants`;
-    wave1.push(searchCategory("bottom", `${bq} ${sexSuffix}${bottomSizeStr}`));
+    wave1.push(searchCategory("bottom", `${bottomQuery} ${sexSuffix}${bottomSizeStr}`));
   } else {
     updateCategoryStatus("bottom", "Skipped");
   }
 
   if (shoesQuery) {
     shoesSizeStr = shoesSizeParam ? ` size ${shoesSizeParam}` : "";
-    const sq = /shoes?|sneakers?|boots?|sandals?|heels?|flats?|loafers?|moccasins?|slippers?|pumps?|oxfords?/i.test(shoesQuery) ? shoesQuery : `${shoesQuery} shoes`;
-    wave1.push(searchCategory("shoes", `${sq} ${sexSuffix}${shoesSizeStr}`));
+    wave1.push(searchCategory("shoes", `${shoesQuery} ${sexSuffix}${shoesSizeStr}`));
   } else {
     updateCategoryStatus("shoes", "Skipped");
   }
 
-  wave1.push(loadUserPhoto());
-  await Promise.allSettled(wave1);
-  console.log(`[Wardrobe] Wave 1 (clothing) complete — ${((Date.now() - searchStartTime) / 1000).toFixed(1)}s`);
-
-  // Wave 2: Accessories (necklace, earrings, bracelets) — after clothing finishes to avoid OOM
-  const wave2 = [];
-
   if (necklaceQuery) {
-    const nq = /necklace/i.test(necklaceQuery) ? necklaceQuery : `${necklaceQuery} necklace`;
-    wave2.push(searchCategory("necklace", `${nq} ${sexSuffix}`));
+    wave1.push(searchCategory("necklace", `${necklaceQuery} ${sexSuffix}`));
   }
   if (earringsQuery) {
-    const eq = /earrings?/i.test(earringsQuery) ? earringsQuery : `${earringsQuery} earrings`;
-    wave2.push(searchCategory("earrings", `${eq} ${sexSuffix}`));
-  }
-  if (braceletsQuery) {
-    const bq = /bracelets?/i.test(braceletsQuery) ? braceletsQuery : `${braceletsQuery} bracelet`;
-    wave2.push(searchCategory("bracelets", `${bq} ${sexSuffix}`));
+    wave1.push(searchCategory("earrings", `${earringsQuery} ${sexSuffix}`));
   }
 
-  if (wave2.length > 0) {
-    await Promise.allSettled(wave2);
-    console.log(`[Wardrobe] Wave 2 (accessories) complete — ${((Date.now() - searchStartTime) / 1000).toFixed(1)}s`);
+  wave1.push(loadUserPhoto());
+  await Promise.allSettled(wave1);
+  console.log(`[Wardrobe] Wave 1 (5 categories) complete — ${((Date.now() - searchStartTime) / 1000).toFixed(1)}s`);
+
+  // Wave 2: last accessory after wave 1 frees memory (transparent to user — loading indicator already showing)
+  if (braceletsQuery) {
+    await Promise.allSettled([searchCategory("bracelets", `${braceletsQuery} ${sexSuffix}`)]);
+    console.log(`[Wardrobe] Wave 2 (bracelets) complete — ${((Date.now() - searchStartTime) / 1000).toFixed(1)}s`);
   }
 
   console.log(`[Wardrobe] All searches complete — ${((Date.now() - searchStartTime) / 1000).toFixed(1)}s elapsed`);
