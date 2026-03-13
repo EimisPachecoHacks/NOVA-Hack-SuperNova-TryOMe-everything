@@ -203,6 +203,7 @@ async function runPhotoGeneration(userId, userEmail, userImages) {
   // Generate 3 posed profile photos (chained: pose 1 result anchors poses 2 & 3)
   const generatedPhotos = [];
   const generatedKeys = [];
+  const poseErrors = [null, null, null];
   let anchorImage = null;
   const totalStart = Date.now();
 
@@ -217,31 +218,46 @@ async function runPhotoGeneration(userId, userEmail, userImages) {
     console.log(`\n\x1b[1m\x1b[35m▶ GENERATING ${poseLabel}\x1b[0m [gemini-3.1-flash-image-preview]${anchorImage ? " (with anchor)" : ""}`);
     const stepStart = Date.now();
 
-    try {
-      const resultBase64 = await generateProfilePhoto(userImages, poseTemplates[i], "image/jpeg", anchorImage, poseDescriptions[i]);
-      const elapsed = ((Date.now() - stepStart) / 1000).toFixed(1);
-      console.log(`\x1b[32m  ✓ ${poseLabel} COMPLETE (${elapsed}s) — ${resultBase64.length} chars\x1b[0m`);
+    let success = false;
+    for (let attempt = 0; attempt < 3 && !success; attempt++) {
+      try {
+        if (attempt > 0) {
+          const wait = attempt * 3000; // 3s, 6s backoff
+          console.log(`\x1b[33m  ↻ ${poseLabel} retry ${attempt}/2 (waiting ${wait / 1000}s)...\x1b[0m`);
+          await new Promise(r => setTimeout(r, wait));
+        }
+        const resultBase64 = await generateProfilePhoto(userImages, poseTemplates[i], "image/jpeg", anchorImage, poseDescriptions[i]);
+        const elapsed = ((Date.now() - stepStart) / 1000).toFixed(1);
+        console.log(`\x1b[32m  ✓ ${poseLabel} COMPLETE (${elapsed}s) — ${resultBase64.length} chars\x1b[0m`);
 
-      generatedPhotos.push(resultBase64);
+        generatedPhotos.push(resultBase64);
 
-      if (!anchorImage) {
-        anchorImage = resultBase64;
-        console.log(`\x1b[36m  ↳ Set as identity anchor for remaining poses\x1b[0m`);
+        if (!anchorImage) {
+          anchorImage = resultBase64;
+          console.log(`\x1b[36m  ↳ Set as identity anchor for remaining poses\x1b[0m`);
+        }
+
+        const key = `users/${userId}/generated_pose_${i}.jpg`;
+        const buffer = Buffer.from(resultBase64, "base64");
+        await s3Client.send(new PutObjectCommand({
+          Bucket: S3_USER_BUCKET,
+          Key: key,
+          Body: buffer,
+          ContentType: "image/jpeg",
+        }));
+        generatedKeys.push(key);
+        success = true;
+      } catch (err) {
+        const elapsed = ((Date.now() - stepStart) / 1000).toFixed(1);
+        const is503 = err.message && (err.message.includes("503") || err.message.includes("UNAVAILABLE") || err.message.includes("high demand"));
+        if (is503 && attempt < 2) {
+          console.log(`\x1b[33m  ⚠ ${poseLabel} got 503 (${elapsed}s) — will retry\x1b[0m`);
+        } else {
+          console.log(`\x1b[31m  ✗ ${poseLabel} FAILED (${elapsed}s): ${err.message}\x1b[0m`);
+          generatedPhotos.push(null);
+          poseErrors[i] = err.message;
+        }
       }
-
-      const key = `users/${userId}/generated_pose_${i}.jpg`;
-      const buffer = Buffer.from(resultBase64, "base64");
-      await s3Client.send(new PutObjectCommand({
-        Bucket: S3_USER_BUCKET,
-        Key: key,
-        Body: buffer,
-        ContentType: "image/jpeg",
-      }));
-      generatedKeys.push(key);
-    } catch (err) {
-      const elapsed = ((Date.now() - stepStart) / 1000).toFixed(1);
-      console.log(`\x1b[31m  ✗ ${poseLabel} FAILED (${elapsed}s): ${err.message}\x1b[0m`);
-      generatedPhotos.push(null);
     }
   }
 
@@ -273,7 +289,7 @@ async function runPhotoGeneration(userId, userEmail, userImages) {
 
   await putProfile(userId, profileData);
 
-  return { generatedPhotos, profileComplete: profileData.profileComplete };
+  return { generatedPhotos, poseErrors, profileComplete: profileData.profileComplete };
 }
 
 // ---------------------------------------------------------------------------

@@ -1201,6 +1201,7 @@ async function handleWizard2Next() {
     document.getElementById(`genImg${i}`).hidden = true;
   }
   document.getElementById('wizard3Done').hidden = true;
+  document.getElementById('genSuccess').hidden = true;
   clearError('genError');
 
   try {
@@ -1218,20 +1219,41 @@ async function handleWizard2Next() {
 
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
 
-    // Update progress UI with results
+    // Show each pose progressively so user sees them appear one by one.
+    // Only show success message + confetti AFTER the last pose image is visible.
     if (result.generatedPhotos) {
       for (let i = 0; i < 3; i++) {
         const step = document.getElementById(`genStep${i}`);
         step.classList.remove('gen-step-active');
         if (result.generatedPhotos[i]) {
-          step.classList.add('gen-step-done');
-          step.querySelector('.gen-step-icon').innerHTML = '&#10003;';
-          const img = document.getElementById(`genImg${i}`);
-          img.src = `data:image/jpeg;base64,${result.generatedPhotos[i]}`;
-          img.hidden = false;
+          // Mark step as active (loading) before showing
+          if (i > 0) {
+            step.classList.add('gen-step-active');
+            step.querySelector('.gen-step-icon').innerHTML = '&#8987;';
+          }
+          // Wait for image to actually load before marking as done
+          await new Promise((resolve) => {
+            const img = document.getElementById(`genImg${i}`);
+            img.onload = () => {
+              step.classList.remove('gen-step-active');
+              step.classList.add('gen-step-done');
+              step.querySelector('.gen-step-icon').innerHTML = '&#10003;';
+              img.hidden = false;
+              resolve();
+            };
+            img.onerror = () => {
+              step.classList.remove('gen-step-active');
+              step.classList.add('gen-step-error');
+              step.querySelector('.gen-step-icon').innerHTML = '&#10007;';
+              resolve();
+            };
+            img.src = `data:image/jpeg;base64,${result.generatedPhotos[i]}`;
+          });
         } else {
           step.classList.add('gen-step-error');
           step.querySelector('.gen-step-icon').innerHTML = '&#10007;';
+          const errMsg = result.poseErrors && result.poseErrors[i] ? result.poseErrors[i] : 'Unknown error';
+          console.error(`[Profile] Pose ${i + 1} failed: ${errMsg}`);
         }
       }
       document.getElementById('genStep2').querySelector('.gen-step-time').textContent = `${totalTime}s total`;
@@ -1246,13 +1268,19 @@ async function handleWizard2Next() {
       });
     }
 
-    // Show success message and complete button
-    const successEl = document.getElementById('genSuccess');
-    if (successEl) successEl.hidden = false;
-    document.getElementById('wizard3Done').hidden = false;
-
-    // Celebrate with confetti!
-    launchConfetti();
+    // Show success message and complete button ONLY after all 3 poses are visible
+    const allDone = [0, 1, 2].every(i =>
+      document.getElementById(`genStep${i}`).classList.contains('gen-step-done')
+    );
+    if (allDone) {
+      const successEl = document.getElementById('genSuccess');
+      if (successEl) successEl.hidden = false;
+      document.getElementById('wizard3Done').hidden = false;
+      launchConfetti();
+    } else {
+      // Some poses failed but still allow completing setup
+      document.getElementById('wizard3Done').hidden = false;
+    }
   } catch (err) {
     showError('genError', 'Generation failed: ' + err.message);
     // Mark all steps as error

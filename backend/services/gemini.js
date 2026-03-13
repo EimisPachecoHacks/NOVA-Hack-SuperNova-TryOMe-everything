@@ -397,14 +397,18 @@ OUTPUT REQUIREMENTS:
     { inlineData: { mimeType: poseTemplateMime, data: poseTemplateBase64 } },
   );
 
-  const response = await client.models.generateContent({
-    model: "gemini-3.1-flash-image-preview",
-    contents: contents,
-    config: {
-      responseModalities: ["TEXT", "IMAGE"],
-      imageConfig: { aspectRatio: "3:4" },
-    },
-  });
+  // 60s timeout per attempt — prevents hanging for 5+ minutes on Gemini overload
+  const response = await Promise.race([
+    client.models.generateContent({
+      model: "gemini-3-pro-image-preview",
+      contents: contents,
+      config: {
+        responseModalities: ["TEXT", "IMAGE"],
+        imageConfig: { aspectRatio: "3:4" },
+      },
+    }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini timeout after 60s")), 60000)),
+  ]);
 
   const candidates = response.candidates || [];
   if (!candidates.length) {
