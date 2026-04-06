@@ -4,7 +4,6 @@
 
 A Chrome Extension that lets you see clothes on YOUR body before you buy. Browse product pages on Amazon, Shein, Temu, or Google Shopping, click "Try It On", and see the garment on your own body in seconds — powered by Amazon Nova, Google Gemini, and Grok xAI.
 
-> Built for the **AI for Bharat Hackathon 2025**
 
 ---
 
